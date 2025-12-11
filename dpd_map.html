@@ -81,10 +81,16 @@
 </div>
 
 <script>
-  // Ініціалізація Telegram WebApp
-  const tg = window.Telegram.WebApp;
-  tg.expand(); // розгортання на всю висоту
-  tg.enableClosingConfirmation(); // щоб не закрили випадково
+  // Ініціалізація Telegram WebApp (щоб не падало в звичайному браузері)
+  let tg = null;
+
+  if (window.Telegram && window.Telegram.WebApp) {
+    tg = window.Telegram.WebApp;
+    tg.expand();
+    tg.enableClosingConfirmation();
+  } else {
+    console.log("Running outside Telegram WebApp – demo mode.");
+  }
 
   // ========= ДЕМО-СТОПИ =========
   // TODO: потім замінимо на реальні дані з бека
@@ -120,11 +126,6 @@
   // ========= ДОДАЄМО МАРКЕРИ =========
   function getStopById(id) {
     return demoStops.find((s) => s.id === id);
-  }
-
-  function isStopDone(id) {
-    const s = getStopById(id);
-    return s ? !!s.done : false;
   }
 
   function updateMarkerStyle(id) {
@@ -212,25 +213,30 @@
     updateMarkerStyle(stop.id);
     renderInfo();
 
-    // шлемо дію боту
-    tg.sendData(
-      JSON.stringify({
-        action: "complete",
-        stop_id: stop.id,
-      })
-    );
+    // якщо є Telegram WebApp — шлемо дію боту
+    if (tg) {
+      tg.sendData(
+        JSON.stringify({
+          action: "complete",
+          stop_id: stop.id,
+        })
+      );
+    } else {
+      console.log("Demo complete:", stop.id);
+    }
   });
 
   btnUndo.addEventListener("click", () => {
-    // Тут ми не знаємо, яку саме краще відкотити, тому покладаємось
-    // на логіку в боті (undo_last_done).
-    tg.sendData(
-      JSON.stringify({
-        action: "undo",
-      })
-    );
+    if (tg) {
+      tg.sendData(
+        JSON.stringify({
+          action: "undo",
+        })
+      );
+    } else {
+      console.log("Demo undo");
+    }
   });
-
 </script>
 </body>
 </html>
