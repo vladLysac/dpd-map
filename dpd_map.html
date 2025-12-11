@@ -8,24 +8,15 @@
   <!-- Telegram WebApp SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
-  <!-- Leaflet CSS & JS -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-sA+e2atX6dMprGgYDJ9n3kLB+LxHkM5C630/2vJG0Cs="
-    crossorigin=""
-  />
-  <script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-o9N1j7kGICpbEt3vo+UoU1LwX5Q5rjzG3oHo9NcmP6w="
-    crossorigin=""
-  ></script>
+  <!-- Leaflet локально з цього ж домену -->
+  <link rel="stylesheet" href="leaflet.css" />
+  <script src="leaflet.js"></script>
 
   <style>
     html, body {
       margin: 0;
       padding: 0;
-      height: 100vh;          /* гарантовано на всю висоту екрана */
+      height: 100vh;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: #111;
       color: #fff;
@@ -37,7 +28,7 @@
     }
     #map {
       flex: 1;
-      min-height: 200px;      /* щоб точно не було нульової висоти */
+      min-height: 200px;
     }
     #controls {
       padding: 8px;
@@ -47,9 +38,10 @@
       justify-content: space-between;
       align-items: center;
       font-size: 14px;
+      flex-wrap: wrap;
     }
     #controls button {
-      flex: 1;
+      flex: 1 1 48%;
       padding: 8px;
       border-radius: 8px;
       border: none;
@@ -69,6 +61,7 @@
       padding: 6px 0 0;
       font-size: 12px;
       opacity: 0.8;
+      width: 100%;
     }
   </style>
 </head>
@@ -78,24 +71,25 @@
   <div id="controls">
     <button id="btn-undo">↩️ Повернути</button>
     <button id="btn-complete">✅ Виконано</button>
+    <div id="info"></div>
   </div>
 </div>
 
 <script>
-  // Невелика функція для виводу помилки на екран
+  // Показ текстової помилки
   function showError(msg) {
     const el = document.createElement("div");
     el.style.padding = "16px";
     el.style.color = "#ff8080";
     el.style.fontSize = "14px";
     el.textContent = msg;
-    document.getElementById("map").innerHTML = "";
-    document.getElementById("map").appendChild(el);
+    const mapEl = document.getElementById("map");
+    mapEl.innerHTML = "";
+    mapEl.appendChild(el);
   }
 
-  // Ініціалізація Telegram WebApp (щоб не падало в звичайному браузері)
+  // Telegram WebApp
   let tg = null;
-
   if (window.Telegram && window.Telegram.WebApp) {
     tg = window.Telegram.WebApp;
     tg.expand();
@@ -104,27 +98,52 @@
     console.log("Running outside Telegram WebApp – demo mode.");
   }
 
-  // Перевіряємо, чи завантажився Leaflet
+  // Перевіряємо Leaflet
   if (!window.L) {
     showError("Помилка: Leaflet не завантажився (об'єкт L відсутній).");
   } else {
-    // ========= ДЕМО-СТОПИ (тимчасово) =========
-    const demoStops = [
-      { id: 1, lat: 51.7005, lng: 8.7642, address: "Warburger Straße 3A, Paderborn", done: false },
-      { id: 2, lat: 51.7020, lng: 8.7610, address: "Dahler Str. 2, Paderborn", done: false },
-      { id: 3, lat: 51.7050, lng: 8.7600, address: "Sebastianstraße 7, Paderborn", done: false },
-    ];
+    // ------------ ЧИТАЄМО ПАРАМЕТРИ З URL ------------
+    const params = new URLSearchParams(window.location.search);
 
-    let selectedStopId = demoStops[0]?.id ?? null;
-    const markers = new Map(); // id -> marker
+    const stopIdFromUrl = parseInt(params.get("id") || "1", 10);
+    const latFromUrl = parseFloat(params.get("lat") || "0");
+    const lngFromUrl = parseFloat(params.get("lng") || "0");
+    const addrFromUrl = params.get("addr")
+      ? decodeURIComponent(params.get("addr"))
+      : null;
 
-    // ========= ІНІЦІАЛІЗАЦІЯ КАРТИ =========
+    let stops = [];
+
+    if (!isNaN(latFromUrl) && !isNaN(lngFromUrl) && addrFromUrl) {
+      // Реальна поточна зупинка з бота
+      stops = [
+        {
+          id: stopIdFromUrl || 1,
+          lat: latFromUrl,
+          lng: lngFromUrl,
+          address: addrFromUrl,
+          done: false,
+        },
+      ];
+    } else {
+      // Фолбек-демо, якщо відкрив у браузері без параметрів
+      stops = [
+        { id: 1, lat: 51.7005, lng: 8.7642, address: "Warburger Straße 3A, Paderborn", done: false },
+        { id: 2, lat: 51.7020, lng: 8.7610, address: "Dahler Str. 2, Paderborn", done: false },
+        { id: 3, lat: 51.7050, lng: 8.7600, address: "Sebastianstraße 7, Paderborn", done: false },
+      ];
+    }
+
+    let selectedStopId = stops[0]?.id ?? null;
+    const markers = new Map();
+
+    // ------------ ІНІЦІАЛІЗАЦІЯ КАРТИ ------------
     const map = L.map("map");
 
-    if (demoStops.length > 0) {
-      const avgLat = demoStops.reduce((sum, s) => sum + s.lat, 0) / demoStops.length;
-      const avgLng = demoStops.reduce((sum, s) => sum + s.lng, 0) / demoStops.length;
-      map.setView([avgLat, avgLng], 13);
+    if (stops.length > 0) {
+      const avgLat = stops.reduce((sum, s) => sum + s.lat, 0) / stops.length;
+      const avgLng = stops.reduce((sum, s) => sum + s.lng, 0) / stops.length;
+      map.setView([avgLat, avgLng], 15);
     } else {
       map.setView([51.7191, 8.7544], 12);
     }
@@ -134,9 +153,9 @@
       attribution: "&copy; OpenStreetMap contributors",
     }).addTo(map);
 
-    // ========= ДОДАЄМО МАРКЕРИ =========
+    // ------------ МАРКЕРИ ------------
     function getStopById(id) {
-      return demoStops.find((s) => s.id === id);
+      return stops.find((s) => s.id === id);
     }
 
     function updateMarkerStyle(id) {
@@ -172,12 +191,7 @@
       const stop = getStopById(selectedStopId);
       if (!stop) return;
 
-      let el = document.getElementById("info");
-      if (!el) {
-        el = document.createElement("div");
-        el.id = "info";
-        document.getElementById("controls").appendChild(el);
-      }
+      const el = document.getElementById("info");
       el.innerText =
         (stop.done ? "✅ Доставлено — " : "❌ Ще не доставлено — ") +
         stop.address;
@@ -193,7 +207,7 @@
       renderInfo();
     }
 
-    demoStops.forEach((stop) => {
+    stops.forEach((stop) => {
       const marker = L.marker([stop.lat, stop.lng]).addTo(map);
       markers.set(stop.id, marker);
 
@@ -209,7 +223,7 @@
       selectStop(selectedStopId);
     }
 
-    // ========= КНОПКИ "ВИКОНАНО" / "ПОВЕРНУТИ" =========
+    // ------------ КНОПКИ "ВИКОНАНО" / "ПОВЕРНУТИ" ------------
     const btnComplete = document.getElementById("btn-complete");
     const btnUndo = document.getElementById("btn-undo");
 
