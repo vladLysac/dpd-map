@@ -41,7 +41,7 @@
       flex-wrap: wrap;
     }
     #controls button {
-      flex: 1 1 48%;
+      flex: 1 1 30%;
       padding: 8px;
       border-radius: 8px;
       border: none;
@@ -57,11 +57,20 @@
       background: #f97316;
       color: #111;
     }
+    #btn-gmaps {
+      background: #2563eb;
+      color: #fff;
+    }
+    #btn-gmaps:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
     #info {
       padding: 6px 0 0;
       font-size: 12px;
       opacity: 0.8;
       width: 100%;
+      flex-basis: 100%;
     }
   </style>
 </head>
@@ -71,6 +80,7 @@
   <div id="controls">
     <button id="btn-undo">↩️ Повернути</button>
     <button id="btn-complete">✅ Виконано</button>
+    <button id="btn-gmaps" disabled>🚗 Маршрут у Google Maps</button>
     <div id="info"></div>
   </div>
 </div>
@@ -205,14 +215,39 @@
       marker.setIcon(icon);
     }
 
+    const infoEl = document.getElementById("info");
+    const btnComplete = document.getElementById("btn-complete");
+    const btnUndo = document.getElementById("btn-undo");
+    const btnGmaps = document.getElementById("btn-gmaps");
+    let currentGmapsUrl = null;
+
     function renderInfo() {
       const stop = getStopById(selectedStopId);
-      if (!stop) return;
+      if (!stop) {
+        infoEl.innerText = "";
+        return;
+      }
 
-      const el = document.getElementById("info");
-      el.innerText =
+      infoEl.innerText =
         (stop.done ? "✅ Доставлено — " : "❌ Ще не доставлено — ") +
         stop.address;
+    }
+
+    function updateGmapsButton(stop) {
+      if (!stop) {
+        currentGmapsUrl = null;
+        btnGmaps.disabled = true;
+        return;
+      }
+
+      const dest = `${stop.lat},${stop.lng}`;
+      const gmapsUrl =
+        "https://www.google.com/maps/dir/?api=1&destination=" +
+        encodeURIComponent(dest) +
+        "&travelmode=driving";
+
+      currentGmapsUrl = gmapsUrl;
+      btnGmaps.disabled = false;
     }
 
     function selectStop(id) {
@@ -223,6 +258,7 @@
         map.panTo([stop.lat, stop.lng]);
       }
       renderInfo();
+      updateGmapsButton(stop);
     }
 
     stops.forEach((stop) => {
@@ -250,6 +286,9 @@
 
     if (selectedStopId !== null) {
       selectStop(selectedStopId);
+    } else {
+      btnGmaps.disabled = true;
+      currentGmapsUrl = null;
     }
 
     // ---------- МАРКЕР ПОЗИЦІЇ ВОДІЯ ----------
@@ -282,9 +321,7 @@
       );
     }
 
-    // ---------- КНОПКИ "ВИКОНАНО" / "ПОВЕРНУТИ" ----------
-    const btnComplete = document.getElementById("btn-complete");
-    const btnUndo = document.getElementById("btn-undo");
+    // ---------- КНОПКИ "ВИКОНАНО" / "ПОВЕРНУТИ" / "GMAPS" ----------
 
     btnComplete.addEventListener("click", () => {
       if (selectedStopId == null) return;
@@ -317,6 +354,11 @@
       } else {
         console.log("Demo undo");
       }
+    });
+
+    btnGmaps.addEventListener("click", () => {
+      if (!currentGmapsUrl) return;
+      window.open(currentGmapsUrl, "_blank");
     });
   }
 </script>
