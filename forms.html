@@ -1,0 +1,97 @@
+<!-- #region HEAD -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Forms</title>
+  <link rel="stylesheet" href="forms.css">
+</head>
+<!-- #endregion -->
+<body>
+  <h1>Forms</h1>
+  <form 
+  action="http://localhost:300/api" 
+  method="post">
+ 
+<!-- #region ВИБРАТИ ДЕНЬ НЕДІЛІ -->
+  <label for="form-field">
+    Day of week:
+    
+    <select name="weekday" required>
+    <option value="" selected>Choose a day</option>
+    <option value="mon">Monday</option>
+    <option value="tue">Tuesday</option>
+    <option value="wed">Wednesday</option>
+    <option value="thu">Thursday</option>
+    <option value="fri">Friday</option>
+    <option value="sat">Saturday</option>
+    <option value="sun">Sunday</option>
+    </select>
+    </label>
+<!-- #endregion -->
+
+<!-- #region ПОЛЯ ДЛЯ ВВОДУ ДАННИХ -->
+   <div class="form-field">
+   Username: <br>
+   <input 
+   type="text" 
+   name="username" 
+   placeholder="Enter your name"
+   pattern="\w+"
+   ></div>
+
+   <div class="form-field">
+   Emaill: <br>
+   <input 
+   type="email" 
+   name="email" 
+   value="misha@mate.academy"
+   tabindex="1"
+   ></div>
+    
+   <div class="form-field">
+   Password: <br>
+   <input 
+   type="password"name="password">
+   </div>
+<!-- #endregion -->
+
+<!-- #region КНОПКИ   -->
+
+  </div>
+  <label class="form-field">
+   <br>
+  <input type="checkbox"name="accepted" value="yes">
+  I accept the terms
+  </label>
+
+  <div class="form-field">
+    <br>
+   <input
+   id="remember-me"
+   type="checkbox"
+   name="remember" 
+   value="yes"
+   checked
+   >
+   <label for="remember-me">Remamber me</label>
+   </div>
+ 
+
+    <button>send</button>
+    <button type="submit">submit</button>
+    <button type="reset">reset</button>
+    <!-- #endregion -->
+
+<!-- #region MІСЦЕ ДЛЯ ВВОДУ ТЕКСТУ -->
+    <textarea 
+    name="description"
+    placeholder="Enter some description"
+    rows="5"
+    cols="20"
+    ></textarea>
+<!-- #endregion -->
+  </form>
+</body>
+</html>

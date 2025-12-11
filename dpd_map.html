@@ -76,7 +76,6 @@
 </div>
 
 <script>
-  // Показ текстової помилки
   function showError(msg) {
     const el = document.createElement("div");
     el.style.padding = "16px";
@@ -98,52 +97,62 @@
     console.log("Running outside Telegram WebApp – demo mode.");
   }
 
-  // Перевіряємо Leaflet
   if (!window.L) {
     showError("Помилка: Leaflet не завантажився (об'єкт L відсутній).");
   } else {
-    // ------------ ЧИТАЄМО ПАРАМЕТРИ З URL ------------
+    // ---------- ЧИТАЄМО ПАРАМЕТРИ З URL ----------
     const params = new URLSearchParams(window.location.search);
-
-    const stopIdFromUrl = parseInt(params.get("id") || "1", 10);
-    const latFromUrl = parseFloat(params.get("lat") || "0");
-    const lngFromUrl = parseFloat(params.get("lng") || "0");
-    const addrFromUrl = params.get("addr")
-      ? decodeURIComponent(params.get("addr"))
-      : null;
+    const stopsParam = params.get("stops");
+    const currentIdFromUrl = parseInt(params.get("current") || "0", 10);
 
     let stops = [];
 
-    if (!isNaN(latFromUrl) && !isNaN(lngFromUrl) && addrFromUrl) {
-      // Реальна поточна зупинка з бота
+    if (stopsParam) {
+      // Формат: id,lat,lng,done|id,lat,lng,done|...
+      stops = stopsParam
+        .split("|")
+        .map((chunk, index) => {
+          const [idStr, latStr, lngStr, doneStr] = chunk.split(",");
+          const id = parseInt(idStr, 10);
+          const lat = parseFloat(latStr);
+          const lng = parseFloat(lngStr);
+          const done = doneStr === "1";
+          if (isNaN(lat) || isNaN(lng)) return null;
+          return {
+            id,
+            lat,
+            lng,
+            done,
+            label: index + 1,
+            address: `Зупинка #${index + 1}`,
+          };
+        })
+        .filter(Boolean);
+    }
+
+    // fallback-демо, якщо відкрили просто в браузері
+    if (!stops.length) {
       stops = [
-        {
-          id: stopIdFromUrl || 1,
-          lat: latFromUrl,
-          lng: lngFromUrl,
-          address: addrFromUrl,
-          done: false,
-        },
-      ];
-    } else {
-      // Фолбек-демо, якщо відкрив у браузері без параметрів
-      stops = [
-        { id: 1, lat: 51.7005, lng: 8.7642, address: "Warburger Straße 3A, Paderborn", done: false },
-        { id: 2, lat: 51.7020, lng: 8.7610, address: "Dahler Str. 2, Paderborn", done: false },
-        { id: 3, lat: 51.7050, lng: 8.7600, address: "Sebastianstraße 7, Paderborn", done: false },
+        { id: 1, lat: 51.7005, lng: 8.7642, address: "Warburger Straße 3A, Paderborn", done: false, label: 1 },
+        { id: 2, lat: 51.7020, lng: 8.7610, address: "Dahler Str. 2, Paderborn", done: false, label: 2 },
+        { id: 3, lat: 51.7050, lng: 8.7600, address: "Sebastianstraße 7, Paderborn", done: false, label: 3 },
       ];
     }
 
-    let selectedStopId = stops[0]?.id ?? null;
+    let selectedStopId =
+      (currentIdFromUrl && stops.find((s) => s.id === currentIdFromUrl)?.id) ||
+      (stops[0] && stops[0].id) ||
+      null;
+
     const markers = new Map();
 
-    // ------------ ІНІЦІАЛІЗАЦІЯ КАРТИ ------------
+    // ---------- КАРТА ----------
     const map = L.map("map");
 
     if (stops.length > 0) {
       const avgLat = stops.reduce((sum, s) => sum + s.lat, 0) / stops.length;
       const avgLng = stops.reduce((sum, s) => sum + s.lng, 0) / stops.length;
-      map.setView([avgLat, avgLng], 15);
+      map.setView([avgLat, avgLng], 14);
     } else {
       map.setView([51.7191, 8.7544], 12);
     }
@@ -153,7 +162,6 @@
       attribution: "&copy; OpenStreetMap contributors",
     }).addTo(map);
 
-    // ------------ МАРКЕРИ ------------
     function getStopById(id) {
       return stops.find((s) => s.id === id);
     }
@@ -164,25 +172,35 @@
       const stop = getStopById(id);
       if (!stop) return;
 
-      const baseColor = stop.done ? "gray" : "red";
-      const radius = selectedStopId === id ? 11 : 8;
+      const isSelected = selectedStopId === id;
+      const bgColor = stop.done ? "#6b7280" : "#ef4444";
+      const borderColor = isSelected ? "#22c55e" : "#ffffff";
+      const size = isSelected ? 28 : 22;
 
       const iconHtml = `
         <div style="
-          width:${radius * 2}px;
-          height:${radius * 2}px;
+          width:${size}px;
+          height:${size}px;
           border-radius:50%;
-          background:${baseColor};
-          border:2px solid white;
+          background:${bgColor};
+          border:2px solid ${borderColor};
           box-shadow:0 0 8px rgba(0,0,0,0.7);
-        "></div>
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          font-size:12px;
+          color:#fff;
+          font-weight:700;
+        ">
+          ${stop.label}
+        </div>
       `;
 
       const icon = L.divIcon({
         html: iconHtml,
         className: "custom-marker",
-        iconSize: [radius * 2, radius * 2],
-        iconAnchor: [radius, radius],
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2],
       });
       marker.setIcon(icon);
     }
@@ -213,7 +231,18 @@
 
       marker.on("click", () => {
         selectStop(stop.id);
-        marker.bindPopup(stop.address, { autoClose: true }).openPopup();
+
+        const dest = `${stop.lat},${stop.lng}`;
+        const gmapsUrl =
+          "https://www.google.com/maps/dir/?api=1&destination=" +
+          encodeURIComponent(dest) +
+          "&travelmode=driving";
+
+        const popupHtml =
+          `Зупинка #${stop.label}<br>` +
+          `<a href="${gmapsUrl}" target="_blank" rel="noopener">Маршрут у Google Maps</a>`;
+
+        marker.bindPopup(popupHtml, { autoClose: true }).openPopup();
       });
 
       updateMarkerStyle(stop.id);
@@ -223,7 +252,37 @@
       selectStop(selectedStopId);
     }
 
-    // ------------ КНОПКИ "ВИКОНАНО" / "ПОВЕРНУТИ" ------------
+    // ---------- МАРКЕР ПОЗИЦІЇ ВОДІЯ ----------
+    let userMarker = null;
+
+    if (navigator.geolocation) {
+      navigator.geolocation.watchPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords;
+          const latlng = [latitude, longitude];
+
+          if (!userMarker) {
+            userMarker = L.circleMarker(latlng, {
+              radius: 8,
+              fillColor: "#4ade80",
+              color: "#22c55e",
+              weight: 2,
+              opacity: 1,
+              fillOpacity: 1,
+            }).addTo(map);
+            userMarker.bindPopup("Ти тут 😊");
+          } else {
+            userMarker.setLatLng(latlng);
+          }
+        },
+        (err) => {
+          console.log("Geo error", err);
+        },
+        { enableHighAccuracy: true, maximumAge: 30000, timeout: 20000 }
+      );
+    }
+
+    // ---------- КНОПКИ "ВИКОНАНО" / "ПОВЕРНУТИ" ----------
     const btnComplete = document.getElementById("btn-complete");
     const btnUndo = document.getElementById("btn-undo");
 

@@ -1,0 +1,83 @@
+/* Плавний скролінг */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Основні стилі */
+body {
+  margin: 0;
+  font-family: sans-serif;
+}
+
+.header {
+  background-color: #333;
+  padding: 10px;
+  text-align: center;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+/* Стилі для навігаційних посилань */
+.nav__link {
+  color: white;
+  text-decoration: none;
+  margin: 0 15px;
+  font-size: 18px;
+  font-weight: bold;
+}
+.nav__link:link {
+  color: white;
+}
+
+.nav__link:visited {
+  color: lightgray;
+}
+
+.nav__link:hover {
+  color: #ffd700; /* Жовтий */
+}
+
+.nav__link:active {
+  color: #0057b7; /* Синій */
+}
+
+.section {
+  height: 300px;
+  border: 5px solid #0057b7;
+  background-color: #ffd700;
+  padding: 10px;
+  margin: 10px 0;
+  position: relative;
+}
+
+/* Підсвічування активної секції */
+.section:target {
+  background-color: green;
+  color: white;
+}
+
+/* Посилання "Go to top" */
+.back-to-top {
+  display: block;
+  margin-top: 20px;
+  text-align: right;
+  text-decoration: none;
+  color: #0057b7;
+  font-weight: bold;
+}
+
+.back-to-top:hover {
+  color: #333;
+}
+
+/* Горизонтальна лінія після кожної секції, крім останньої */
+.section:not(:last-child)::after {
+  content: "";
+  display: block;
+  height: 4px; /* Висота лінії */
+  background-color: #333; /* Колір лінії */
+  border-radius: 2px; /* Закруглені кути */
+  margin: 10px auto; /* Відступи зверху і знизу */
+  width: 100%; /* Ширина лінії */
+}

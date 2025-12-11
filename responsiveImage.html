@@ -1,0 +1,29 @@
+<!-- #region HEAD -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Responsive images</title>
+  <link rel="stylesheet" href="responsiveImage.css">
+</head>
+<!-- #endregion -->
+<body> 
+  <!-- cntrl+shift+P модна викликати функцію обгортанняю
+   Wrap with abriviation-->
+  <picture>
+    <source
+     media="(max-width: 600px)" 
+     srcset="https://placehold.co/300x150/ff0/00f.png">
+    
+     <source
+     media="(max-width: 800px)" 
+     srcset="https://placehold.co/400x200/ff0/00f.png">
+
+    <img class="picture"
+     src="https://placehold.co/1200x600/ff0/00f.png"
+     alt="Image description">
+
+  </picture>
+</body>
+</html>

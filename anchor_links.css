@@ -1,0 +1,37 @@
+html {
+  font-family: Arial, Helvetica, sans-serif;
+  scroll-behavior: smooth;/*додає повільне прокручування сторінки*/
+} /*встановлюємо шрифт*/
+
+body {
+  margin: 0;
+} /*прибираємо відступи*/
+
+.nav {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 20px;
+  background-color: #222;
+} /*стилі для наавігації зверху*/
+
+.nav_link {
+  line-height: 40px;
+  text-decoration: none;
+  color: #fff;
+}/*стилі для класу nav_link*/
+
+main {
+  padding: 0 20px;
+}/*стилі для класу main*/
+
+.section {
+  height: 300px;
+  border: 5px solid #0057b7;
+  background-color: #ffd700;
+  padding: 0 5px;
+  margin: 10px 0;
+}
+
+.section:target {
+  background-color: green;
+}/*взаємодія з активною секцією*/

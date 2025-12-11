@@ -1,0 +1,93 @@
+/* Основні змінні */
+html {
+  --button-wdth: 50px;
+  --button-height: 50px;
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  box-sizing: border-box;
+  font-family: sans-serif;
+
+  --header-height: 60px;
+  --footer-height: 60px;
+}
+
+.main {
+  min-height: calc(100vh - var(--header-height) - var(--footer-height));
+}
+
+.section {
+  padding: 20px;
+}
+
+.container {
+  min-width: 500px;
+  max-width: 960px;
+  margin: 0 auto;
+  height: 500px;
+  background-color: cornsilk;
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid gainsboro;
+}
+
+.footer {
+  background-color: #444;
+  text-align: center;
+  line-height: var(--footer-height);
+  color: #fff;
+  height: var(--footer-height);
+}
+
+/* Sticky навігація */
+.nav {
+  text-align: center;
+  height: var(--header-height);
+  background-color: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  position: sticky; /* Sticky позиціонування */
+  top: 0; /* Закріплення у верхній частині */
+  right: 0; /* Правий край */
+  left: 0;  /* Лівий край */
+  z-index: 1000; /* Пріоритет */
+}
+
+
+.nav__link:link {
+  display: inline-block;
+  font-size: 18px;
+  margin: 0 10px;
+  padding: 20px 10px;
+  color: #fff;
+  text-decoration: none;
+}
+
+.nav__link:visited {
+  color: green;
+}
+
+.heading {
+  text-align: center;
+}
+
+/* Кнопка ScrollTop */
+.scrollTop {
+  position: fixed; /* Фіксована позиція */
+  right: 32px; /* Відступ від правого краю */
+  bottom: 64px; /* Відступ від нижнього краю */
+  width: var(--button-width);
+  height: var(--button-height);
+  background-color: #444; /* Колір кнопки */
+  border-radius: 50%; /* Кругла кнопка */
+  text-align: center; /* Вирівнювання тексту по центру */
+  line-height: var(--button-height);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3); /* Тінь */
+}
+
+.scrollTop__link {
+  color: white; /* Колір стрілки */
+  font-size: 30px; /* Розмір шрифту */
+  text-decoration: none;
+}

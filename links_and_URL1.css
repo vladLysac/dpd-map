@@ -1,0 +1,29 @@
+a {
+  display: block;/*робимо в стовбчик*/
+  padding: 5px 10px; /*відступ в середені елемента*/
+  margin: 5px 0; /*відступи між посиланнями */
+  text-decoration: none;
+  background-color: #ccc;
+  color: green;
+}
+
+a:link {
+  color: green; /*невідвідані посилання */
+}
+a:visited {
+  color: red; /*відвідані послиння*/
+}
+a:hover {
+  background-color: blue; /*взаємодія з посиланнями*/
+}
+a:active {
+  color: aqua; /*взаємодія при натисканні*/
+}
+
+/*loVe HAte це нагадування за 
+допомогою якого можна запам'ятати як потрібно 
+встановлювати класи для linkiv 
+L-libk
+V-visited
+H-hover
+A-active*/

@@ -1,0 +1,22 @@
+/* Оптимізовані налаштування для фонових зображень */
+.picture {
+  height: 0;
+  padding-bottom: 50%;
+  background-image: url(https://placehold.co/300x150/ff0/00f.png);
+  border: 10px solid #000;
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
+}
+
+@media (min-width: 576px) {
+  .picture {
+    background-image: url(https://placehold.co/400x200/ff0/00f.png);
+  }
+}
+
+@media (min-width: 768px) {
+  .picture {
+    background-image: url(https://placehold.co/1200x600/ff0/00f.png);
+  }
+}

@@ -1,0 +1,40 @@
+body {
+  margin: 0 auto;
+  font-family: sans-serif;
+  width: max-content;
+}
+
+.title {
+  text-align: center;
+  color: saddlebrown;
+}
+
+.cat-dog {
+  display: block;
+}
+
+.avatars-container {
+  width: max-content;
+  margin: 0 auto;
+}
+
+.avatar-container {
+  display: inline-block;
+}
+
+.avatar {
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  border: 10px solid burlywood;
+}
+
+.avatar--cat {
+  object-fit: none; /* Не масштабує зображення */
+  object-position: top left; /* Позиція: верхній лівий кут */
+}
+
+.avatar--dog {
+  object-fit: none; /* Не масштабує зображення */
+  object-position: top right; /* Позиція: верхній правий кут */
+}

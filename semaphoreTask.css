@@ -1,0 +1,53 @@
+/* Базові стилі для світлофора */
+.semaphore {
+  width: 30%; /* Ширина 30% */
+  max-width: 200px; /* Максимальна ширина */
+  min-width: 100px; /* Мінімальна ширина */
+  margin: 0 auto; /* Центрування по горизонталі */
+  padding: 20px;
+  border-radius: 50px;
+  background-color: #444;
+}
+
+.light {
+  width: 100%; /* Ширина 100% від батьківського контейнера */
+  padding-bottom: 100%; /* Робить висоту рівною ширині, щоб створити квадрат */
+  border-radius: 50%; /* Закруглення до форми кола */
+  margin-bottom: 5%; /* Відступ між світлофорами */
+}
+
+/* Кольори для кожного світла за замовчуванням */
+.light--stop {
+  background-color: #400; /* Темно-червоний */
+}
+
+.light--ready {
+  background-color: #440; /* Темно-жовтий */
+}
+
+.light--go {
+  background-color: #040; /* Темно-зелений */
+}
+
+/* Медійні запити для зміни кольорів світлофора */
+
+/* Ширина екрану до 499px */
+@media (max-width: 499px) {
+  .light--stop {
+    background-color: #f00; /* Яскраво-червоний */
+  }
+}
+
+/* Ширина екрану від 500px до 599px */
+@media (min-width: 500px) and (max-width: 599px) {
+  .light--ready {
+    background-color: #ff0; /* Яскраво-жовтий */
+  }
+}
+
+/* Ширина екрану від 600px і більше */
+@media (min-width: 600px) {
+  .light--go {
+    background-color: #0f0; /* Яскраво-зелений */
+  }
+}

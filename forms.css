@@ -1,0 +1,34 @@
+/*НАЙЧАСТІШЕ ВИКОРИСТОВУВАНІ КЛАСИ*/
+.form-field {
+  margin-bottom: 10px;
+  display: block;
+}
+
+input::placeholder {
+  color: rgb(175, 181, 181);
+  font-weight: bold;
+}
+
+:focus {
+  background-color: rgb(185, 193, 197);
+}
+/* :valid */
+input:invalid {
+  border-color: red;
+}
+
+input:checked + label {
+  color: rgb(56, 226, 56);
+}
+
+label:has(input:checked) {
+  color: green;
+}
+
+button:hover {
+  color: green;
+}
+
+button:active {
+  color:green;
+}
