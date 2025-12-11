@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <title>DPD Route Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Telegram WebApp SDK -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+  <!-- Leaflet CSS & JS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-sA+e2atX6dMprGgYDJ9n3kLB+LxHkM5C630/2vJG0Cs="
+    crossorigin=""
+  />
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-o9N1j7kGICpbEt3vo+UoU1LwX5Q5rjzG3oHo9NcmP6w="
+    crossorigin=""
+  ></script>
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #111;
+      color: #fff;
+    }
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+    #map {
+      flex: 1;
+    }
+    #controls {
+      padding: 8px;
+      background: rgba(0, 0, 0, 0.85);
+      display: flex;
+      gap: 8px;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 14px;
+    }
+    #controls button {
+      flex: 1;
+      padding: 8px;
+      border-radius: 8px;
+      border: none;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #btn-complete {
+      background: #16a34a;
+      color: #fff;
+    }
+    #btn-undo {
+      background: #f97316;
+      color: #111;
+    }
+    #info {
+      padding: 6px 0 0;
+      font-size: 12px;
+      opacity: 0.8;
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div id="map"></div>
+  <div id="controls">
+    <button id="btn-undo">↩️ Повернути</button>
+    <button id="btn-complete">✅ Виконано</button>
+  </div>
+</div>
+
+<script>
+  // Ініціалізація Telegram WebApp
+  const tg = window.Telegram.WebApp;
+  tg.expand(); // розгортання на всю висоту
+  tg.enableClosingConfirmation(); // щоб не закрили випадково
+
+  // ========= ДЕМО-СТОПИ =========
+  // TODO: потім замінимо на реальні дані з бека
+  const demoStops = [
+    { id: 1, lat: 51.7005, lng: 8.7642, address: "Warburger Straße 3A, Paderborn", done: false },
+    { id: 2, lat: 51.7020, lng: 8.7610, address: "Dahler Str. 2, Paderborn", done: false },
+    { id: 3, lat: 51.7050, lng: 8.7600, address: "Sebastianstraße 7, Paderborn", done: false },
+  ];
+
+  let selectedStopId = demoStops[0]?.id ?? null;
+  const markers = new Map(); // id -> marker
+
+  // ========= ІНІЦІАЛІЗАЦІЯ КАРТИ =========
+  const map = L.map("map");
+
+  // Середнє положення по демо-точках
+  if (demoStops.length > 0) {
+    const avgLat =
+      demoStops.reduce((sum, s) => sum + s.lat, 0) / demoStops.length;
+    const avgLng =
+      demoStops.reduce((sum, s) => sum + s.lng, 0) / demoStops.length;
+    map.setView([avgLat, avgLng], 13);
+  } else {
+    // запасний варіант — центр Paderborn :)
+    map.setView([51.7191, 8.7544], 12);
+  }
+
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "&copy; OpenStreetMap contributors",
+  }).addTo(map);
+
+  // ========= ДОДАЄМО МАРКЕРИ =========
+  function getStopById(id) {
+    return demoStops.find((s) => s.id === id);
+  }
+
+  function isStopDone(id) {
+    const s = getStopById(id);
+    return s ? !!s.done : false;
+  }
+
+  function updateMarkerStyle(id) {
+    const marker = markers.get(id);
+    if (!marker) return;
+    const stop = getStopById(id);
+    if (!stop) return;
+
+    const baseColor = stop.done ? "gray" : "red";
+    const radius = selectedStopId === id ? 11 : 8;
+
+    const iconHtml = `
+      <div style="
+        width:${radius * 2}px;
+        height:${radius * 2}px;
+        border-radius:50%;
+        background:${baseColor};
+        border:2px solid white;
+        box-shadow:0 0 8px rgba(0,0,0,0.7);
+      "></div>
+    `;
+
+    const icon = L.divIcon({
+      html: iconHtml,
+      className: "custom-marker",
+      iconSize: [radius * 2, radius * 2],
+      iconAnchor: [radius, radius],
+    });
+    marker.setIcon(icon);
+  }
+
+  function renderInfo() {
+    const stop = getStopById(selectedStopId);
+    if (!stop) return;
+
+    let el = document.getElementById("info");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "info";
+      document.getElementById("controls").appendChild(el);
+    }
+    el.innerText =
+      (stop.done ? "✅ Доставлено — " : "❌ Ще не доставлено — ") +
+      stop.address;
+  }
+
+  function selectStop(id) {
+    selectedStopId = id;
+    markers.forEach((_m, key) => updateMarkerStyle(key));
+    const stop = getStopById(id);
+    if (stop) {
+      map.panTo([stop.lat, stop.lng]);
+    }
+    renderInfo();
+  }
+
+  demoStops.forEach((stop) => {
+    const marker = L.marker([stop.lat, stop.lng]).addTo(map);
+    markers.set(stop.id, marker);
+
+    marker.on("click", () => {
+      selectStop(stop.id);
+      marker.bindPopup(stop.address, { autoClose: true }).openPopup();
+    });
+
+    updateMarkerStyle(stop.id);
+  });
+
+  if (selectedStopId !== null) {
+    selectStop(selectedStopId);
+  }
+
+  // ========= КНОПКИ "ВИКОНАНО" / "ПОВЕРНУТИ" =========
+
+  const btnComplete = document.getElementById("btn-complete");
+  const btnUndo = document.getElementById("btn-undo");
+
+  btnComplete.addEventListener("click", () => {
+    if (selectedStopId == null) return;
+    const stop = getStopById(selectedStopId);
+    if (!stop) return;
+
+    // локально ставимо done, щоб на карті одразу оновити
+    stop.done = true;
+    updateMarkerStyle(stop.id);
+    renderInfo();
+
+    // шлемо дію боту
+    tg.sendData(
+      JSON.stringify({
+        action: "complete",
+        stop_id: stop.id,
+      })
+    );
+  });
+
+  btnUndo.addEventListener("click", () => {
+    // Тут ми не знаємо, яку саме краще відкотити, тому покладаємось
+    // на логіку в боті (undo_last_done).
+    tg.sendData(
+      JSON.stringify({
+        action: "undo",
+      })
+    );
+  });
+
+</script>
+</body>
+</html>
