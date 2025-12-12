@@ -68,9 +68,20 @@
     #info {
       padding: 6px 0 0;
       font-size: 12px;
-      opacity: 0.8;
+      opacity: 0.9;
       width: 100%;
       flex-basis: 100%;
+      line-height: 1.25;
+    }
+    #info .addr {
+      font-size: 13px;
+      font-weight: 700;
+      opacity: 1;
+    }
+    #info .status {
+      font-size: 12px;
+      opacity: 0.85;
+      margin-top: 2px;
     }
   </style>
 </head>
@@ -117,25 +128,36 @@
 
     let stops = [];
 
+    function safeDecode(s) {
+      try { return decodeURIComponent(s); } catch (e) { return s; }
+    }
+
     if (stopsParam) {
-      // Формат: id,lat,lng,done|id,lat,lng,done|...
+      // Старий формат: id,lat,lng,done
+      // Новий формат:   id,lat,lng,done,label,addressEncoded
       stops = stopsParam
         .split("|")
         .map((chunk, index) => {
-          const [idStr, latStr, lngStr, doneStr] = chunk.split(",");
-          const id = parseInt(idStr, 10);
-          const lat = parseFloat(latStr);
-          const lng = parseFloat(lngStr);
-          const done = doneStr === "1";
-          if (isNaN(lat) || isNaN(lng)) return null;
-          return {
-            id,
-            lat,
-            lng,
-            done,
-            label: index + 1,
-            address: `Зупинка #${index + 1}`,
-          };
+          const parts = chunk.split(",");
+          const id = parseInt(parts[0], 10);
+          const lat = parseFloat(parts[1]);
+          const lng = parseFloat(parts[2]);
+          const done = parts[3] === "1";
+
+          if (isNaN(lat) || isNaN(lng) || isNaN(id)) return null;
+
+          let label = index + 1;
+          let address = `Зупинка #${index + 1}`;
+
+          if (parts.length >= 5 && parts[4] !== "") {
+            const parsedLabel = parseInt(parts[4], 10);
+            if (!isNaN(parsedLabel)) label = parsedLabel;
+          }
+          if (parts.length >= 6 && parts[5] !== "") {
+            address = safeDecode(parts[5]);
+          }
+
+          return { id, lat, lng, done, label, address };
         })
         .filter(Boolean);
     }
@@ -224,13 +246,15 @@
     function renderInfo() {
       const stop = getStopById(selectedStopId);
       if (!stop) {
-        infoEl.innerText = "";
+        infoEl.innerHTML = "";
         return;
       }
 
-      infoEl.innerText =
-        (stop.done ? "✅ Доставлено — " : "❌ Ще не доставлено — ") +
-        stop.address;
+      const statusText = stop.done ? "✅ Доставлено" : "❌ Ще не доставлено";
+      infoEl.innerHTML = `
+        <div class="addr">${stop.address}</div>
+        <div class="status">${statusText}</div>
+      `;
     }
 
     function updateGmapsButton(stop) {
@@ -268,15 +292,10 @@
       marker.on("click", () => {
         selectStop(stop.id);
 
-        const dest = `${stop.lat},${stop.lng}`;
-        const gmapsUrl =
-          "https://www.google.com/maps/dir/?api=1&destination=" +
-          encodeURIComponent(dest) +
-          "&travelmode=driving";
-
+        // popup ТІЛЬКИ з назвою/адресою, без лінків
         const popupHtml =
-          `Зупинка #${stop.label}<br>` +
-          `<a href="${gmapsUrl}" target="_blank" rel="noopener">Маршрут у Google Maps</a>`;
+          `<b>${stop.address}</b><br>` +
+          `Зупинка: #${stop.label}`;
 
         marker.bindPopup(popupHtml, { autoClose: true }).openPopup();
       });
@@ -346,11 +365,7 @@
 
     btnUndo.addEventListener("click", () => {
       if (tg) {
-        tg.sendData(
-          JSON.stringify({
-            action: "undo",
-          })
-        );
+        tg.sendData(JSON.stringify({ action: "undo" }));
       } else {
         console.log("Demo undo");
       }
