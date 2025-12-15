@@ -50,7 +50,7 @@
       cursor: pointer;
     }
 
-    /* ✅ ДОДАНО: кнопка "Я тут" */
+    /* ✅ кнопка "Я тут" */
     #btn-me {
       background: #0ea5e9;
       color: #fff;
@@ -96,7 +96,6 @@
 <div id="app">
   <div id="map"></div>
   <div id="controls">
-    <!-- ✅ ДОДАНО: кнопка "Я тут" -->
     <button id="btn-me">🎯 Я тут</button>
 
     <button id="btn-undo">↩️ Повернути</button>
@@ -251,8 +250,6 @@
     const btnComplete = document.getElementById("btn-complete");
     const btnUndo = document.getElementById("btn-undo");
     const btnGmaps = document.getElementById("btn-gmaps");
-
-    /* ✅ ДОДАНО: кнопка "Я тут" */
     const btnMe = document.getElementById("btn-me");
 
     let currentGmapsUrl = null;
@@ -345,6 +342,63 @@
       requestAnimationFrame(step);
     }
 
+    // ================== ✅ ДОДАНО: FOLLOW MODE (довге натискання) ==================
+    let followMe = false;
+    let pressTimer = null;
+    let longPressTriggered = false;
+    const LONG_PRESS_MS = 600;
+
+    function setFollowState(on) {
+      followMe = on;
+      btnMe.textContent = followMe ? "🧲 Слідкую" : "🎯 Я тут";
+    }
+
+    function centerOnMe() {
+      if (lastUserPos) {
+        map.flyTo(lastUserPos, Math.max(map.getZoom(), 16), { duration: 0.6 });
+        if (userMarker) userMarker.openPopup();
+      } else {
+        console.log("Ще немає геолокації");
+      }
+    }
+
+    function startPress() {
+      longPressTriggered = false;
+      clearTimeout(pressTimer);
+      pressTimer = setTimeout(() => {
+        longPressTriggered = true;
+        setFollowState(!followMe);
+        if (followMe) centerOnMe();
+      }, LONG_PRESS_MS);
+    }
+
+    function endPress() {
+      clearTimeout(pressTimer);
+      if (!longPressTriggered) {
+        centerOnMe();
+      }
+    }
+
+    btnMe.addEventListener("mousedown", startPress);
+    btnMe.addEventListener("mouseup", endPress);
+    btnMe.addEventListener("mouseleave", () => clearTimeout(pressTimer));
+
+    btnMe.addEventListener("touchstart", startPress, { passive: true });
+    btnMe.addEventListener("touchend", endPress);
+    btnMe.addEventListener("touchcancel", () => clearTimeout(pressTimer));
+
+    // ✅ ДОДАНО: якщо водій РУКАМИ рухає/зумиє карту — слідкування вимикається
+    function stopFollowOnUserAction(e) {
+      // Leaflet для реальних дій користувача часто має originalEvent
+      // (а для програмних setView/panTo — його немає)
+      if (followMe && e && e.originalEvent) {
+        setFollowState(false);
+      }
+    }
+    map.on("dragstart", stopFollowOnUserAction);
+    map.on("zoomstart", stopFollowOnUserAction);
+    // ============================================================================
+
     if (navigator.geolocation) {
       // якщо раптом перезапускаєш — чистимо старе
       if (watchId !== null) navigator.geolocation.clearWatch(watchId);
@@ -354,8 +408,7 @@
           const { latitude, longitude, accuracy } = pos.coords;
           const latlng = [latitude, longitude];
 
-          // (опційно) фільтр “GPS шуму”: якщо точність дуже погана — не смикаємо маркер
-          // можеш змінити 80 на 120, якщо треба
+          // фільтр “GPS шуму”
           if (userMarker && accuracy && accuracy > 120) return;
 
           if (!userMarker) {
@@ -370,9 +423,14 @@
             userMarker.bindPopup("Ти тут 😊");
             lastUserPos = latlng;
           } else {
-            // плавне пересування замість “телепорта”
             animateLatLngCircleMarker(userMarker, lastUserPos, latlng, 500);
             lastUserPos = latlng;
+          }
+
+          // ✅ ДОДАНО: якщо включено слідкування — тримаємо водія по центру
+          // (без анімації, щоб не "плавало" на кожному апдейті)
+          if (followMe) {
+            map.setView(latlng, map.getZoom(), { animate: false });
           }
         },
         (err) => {
@@ -380,21 +438,11 @@
         },
         {
           enableHighAccuracy: true,
-          maximumAge: 0,   // ВАЖЛИВО: без кешу, інакше будуть “ривки”
+          maximumAge: 0,
           timeout: 8000
         }
       );
     }
-
-    /* ✅ ДОДАНО: логіка кнопки "Я тут" (центрує на водієві) */
-    btnMe.addEventListener("click", () => {
-      if (lastUserPos) {
-        map.flyTo(lastUserPos, Math.max(map.getZoom(), 16), { duration: 0.6 });
-        if (userMarker) userMarker.openPopup();
-      } else {
-        console.log("Ще немає геолокації");
-      }
-    });
 
     // ---------- КНОПКИ "ВИКОНАНО" / "ПОВЕРНУТИ" / "GMAPS" ----------
     btnComplete.addEventListener("click", () => {
