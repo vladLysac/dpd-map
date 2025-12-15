@@ -49,13 +49,6 @@
       font-weight: 600;
       cursor: pointer;
     }
-
-    /* ✅ кнопка "Я тут" */
-    #btn-me {
-      background: #0ea5e9;
-      color: #fff;
-    }
-
     #btn-complete {
       background: #16a34a;
       color: #fff;
@@ -96,8 +89,6 @@
 <div id="app">
   <div id="map"></div>
   <div id="controls">
-    <button id="btn-me">🎯 Я тут</button>
-
     <button id="btn-undo">↩️ Повернути</button>
     <button id="btn-complete">✅ Виконано</button>
     <button id="btn-gmaps" disabled>🚗 Маршрут у Google Maps</button>
@@ -250,8 +241,6 @@
     const btnComplete = document.getElementById("btn-complete");
     const btnUndo = document.getElementById("btn-undo");
     const btnGmaps = document.getElementById("btn-gmaps");
-    const btnMe = document.getElementById("btn-me");
-
     let currentGmapsUrl = null;
 
     function renderInfo() {
@@ -321,130 +310,71 @@
       currentGmapsUrl = null;
     }
 
-    // ---------- МАРКЕР ПОЗИЦІЇ ВОДІЯ (плавно + частіше) ----------
-    let userMarker = null;
-    let lastUserPos = null;
-    let watchId = null;
+  // ---------- МАРКЕР ПОЗИЦІЇ ВОДІЯ (плавно + частіше) ----------
+  let userMarker = null;
+  let lastUserPos = null;
+  let watchId = null;
 
-    function animateLatLngCircleMarker(marker, from, to, duration = 500) {
-      const start = performance.now();
-      const lat1 = from[0], lng1 = from[1];
-      const lat2 = to[0],   lng2 = to[1];
+  function animateLatLngCircleMarker(marker, from, to, duration = 500) {
+    const start = performance.now();
+    const lat1 = from[0], lng1 = from[1];
+    const lat2 = to[0],   lng2 = to[1];
 
-      function step(now) {
-        const t = Math.min(1, (now - start) / duration);
-        const lat = lat1 + (lat2 - lat1) * t;
-        const lng = lng1 + (lng2 - lng1) * t;
-        marker.setLatLng([lat, lng]);
-        if (t < 1) requestAnimationFrame(step);
-      }
-
-      requestAnimationFrame(step);
+    function step(now) {
+      const t = Math.min(1, (now - start) / duration);
+      const lat = lat1 + (lat2 - lat1) * t;
+      const lng = lng1 + (lng2 - lng1) * t;
+      marker.setLatLng([lat, lng]);
+      if (t < 1) requestAnimationFrame(step);
     }
 
-    // ================== ✅ ДОДАНО: FOLLOW MODE (довге натискання) ==================
-    let followMe = false;
-    let pressTimer = null;
-    let longPressTriggered = false;
-    const LONG_PRESS_MS = 600;
+    requestAnimationFrame(step);
+  }
 
-    function setFollowState(on) {
-      followMe = on;
-      btnMe.textContent = followMe ? "🧲 Слідкую" : "🎯 Я тут";
-    }
+  if (navigator.geolocation) {
+    // якщо раптом перезапускаєш — чистимо старе
+    if (watchId !== null) navigator.geolocation.clearWatch(watchId);
 
-    function centerOnMe() {
-      if (lastUserPos) {
-        map.flyTo(lastUserPos, Math.max(map.getZoom(), 16), { duration: 0.6 });
-        if (userMarker) userMarker.openPopup();
-      } else {
-        console.log("Ще немає геолокації");
-      }
-    }
+    watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        const latlng = [latitude, longitude];
 
-    function startPress() {
-      longPressTriggered = false;
-      clearTimeout(pressTimer);
-      pressTimer = setTimeout(() => {
-        longPressTriggered = true;
-        setFollowState(!followMe);
-        if (followMe) centerOnMe();
-      }, LONG_PRESS_MS);
-    }
+        // (опційно) фільтр “GPS шуму”: якщо точність дуже погана — не смикаємо маркер
+        // можеш змінити 80 на 120, якщо треба
+        if (userMarker && accuracy && accuracy > 120) return;
 
-    function endPress() {
-      clearTimeout(pressTimer);
-      if (!longPressTriggered) {
-        centerOnMe();
-      }
-    }
-
-    btnMe.addEventListener("mousedown", startPress);
-    btnMe.addEventListener("mouseup", endPress);
-    btnMe.addEventListener("mouseleave", () => clearTimeout(pressTimer));
-
-    btnMe.addEventListener("touchstart", startPress, { passive: true });
-    btnMe.addEventListener("touchend", endPress);
-    btnMe.addEventListener("touchcancel", () => clearTimeout(pressTimer));
-
-    // ✅ ДОДАНО: якщо водій РУКАМИ рухає/зумиє карту — слідкування вимикається
-    function stopFollowOnUserAction(e) {
-      // Leaflet для реальних дій користувача часто має originalEvent
-      // (а для програмних setView/panTo — його немає)
-      if (followMe && e && e.originalEvent) {
-        setFollowState(false);
-      }
-    }
-    map.on("dragstart", stopFollowOnUserAction);
-    map.on("zoomstart", stopFollowOnUserAction);
-    // ============================================================================
-
-    if (navigator.geolocation) {
-      // якщо раптом перезапускаєш — чистимо старе
-      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-
-      watchId = navigator.geolocation.watchPosition(
-        (pos) => {
-          const { latitude, longitude, accuracy } = pos.coords;
-          const latlng = [latitude, longitude];
-
-          // фільтр “GPS шуму”
-          if (userMarker && accuracy && accuracy > 120) return;
-
-          if (!userMarker) {
-            userMarker = L.circleMarker(latlng, {
-              radius: 8,
-              fillColor: "#4ade80",
-              color: "#22c55e",
-              weight: 2,
-              opacity: 1,
-              fillOpacity: 1,
-            }).addTo(map);
-            userMarker.bindPopup("Ти тут 😊");
-            lastUserPos = latlng;
-          } else {
-            animateLatLngCircleMarker(userMarker, lastUserPos, latlng, 500);
-            lastUserPos = latlng;
-          }
-
-          // ✅ ДОДАНО: якщо включено слідкування — тримаємо водія по центру
-          // (без анімації, щоб не "плавало" на кожному апдейті)
-          if (followMe) {
-            map.setView(latlng, map.getZoom(), { animate: false });
-          }
-        },
-        (err) => {
-          console.log("Geo error", err);
-        },
-        {
-          enableHighAccuracy: true,
-          maximumAge: 0,
-          timeout: 8000
+        if (!userMarker) {
+          userMarker = L.circleMarker(latlng, {
+            radius: 8,
+            fillColor: "#4ade80",
+            color: "#22c55e",
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 1,
+          }).addTo(map);
+          userMarker.bindPopup("Ти тут 😊");
+          lastUserPos = latlng;
+        } else {
+          // плавне пересування замість “телепорта”
+          animateLatLngCircleMarker(userMarker, lastUserPos, latlng, 500);
+          lastUserPos = latlng;
         }
-      );
-    }
+      },
+      (err) => {
+        console.log("Geo error", err);
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 0,   // ВАЖЛИВО: без кешу, інакше будуть “ривки”
+        timeout: 8000
+      }
+    );
+  }
+
 
     // ---------- КНОПКИ "ВИКОНАНО" / "ПОВЕРНУТИ" / "GMAPS" ----------
+
     btnComplete.addEventListener("click", () => {
       if (selectedStopId == null) return;
       const stop = getStopById(selectedStopId);
