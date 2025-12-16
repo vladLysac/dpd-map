@@ -83,8 +83,6 @@
       opacity: 0.85;
       margin-top: 2px;
     }
-
-    /* ✅ лишаємо тільки крапку кольору району (без тексту Район #...) */
     #info .region {
       margin-top: 6px;
       display: inline-flex;
@@ -125,7 +123,6 @@
     mapEl.appendChild(el);
   }
 
-  // Telegram WebApp
   let tg = null;
   if (window.Telegram && window.Telegram.WebApp) {
     tg = window.Telegram.WebApp;
@@ -138,7 +135,6 @@
   if (!window.L) {
     showError("Помилка: Leaflet не завантажився (об'єкт L відсутній).");
   } else {
-    // ---------- ЧИТАЄМО ПАРАМЕТРИ З URL ----------
     const params = new URLSearchParams(window.location.search);
     const stopsParam = params.get("stops");
     const currentIdFromUrl = parseInt(params.get("current") || "0", 10);
@@ -150,12 +146,14 @@
     }
 
     if (stopsParam) {
-      // Старий формат: id,lat,lng,done
-      // Новий формат:   id,lat,lng,done,label,addressEncoded
+      // Формат: id,lat,lng,done,label,addressEncoded
+      // ✅ Надійність: якщо раптом у майбутньому "прилетить" зайва кома — адреса не зламає парсер.
       stops = stopsParam
         .split("|")
         .map((chunk, index) => {
           const parts = chunk.split(",");
+          if (parts.length < 4) return null;
+
           const id = parseInt(parts[0], 10);
           const lat = parseFloat(parts[1]);
           const lng = parseFloat(parts[2]);
@@ -170,17 +168,19 @@
             const parsedLabel = parseInt(parts[4], 10);
             if (!isNaN(parsedLabel)) label = parsedLabel;
           }
-          if (parts.length >= 6 && parts[5] !== "") {
-            address = safeDecode(parts[5]);
+
+          // ✅ Оце головна правка:
+          // адреса може бути "хвостом" після 5-го елемента — склеюємо назад через кому
+          if (parts.length >= 6) {
+            const addrEnc = parts.slice(5).join(",");
+            if (addrEnc !== "") address = safeDecode(addrEnc);
           }
 
-          // regionGroup ми присвоїмо нижче другим проходом
           return { id, lat, lng, done, label, address, regionGroup: 0, regionColor: "#ef4444" };
         })
         .filter(Boolean);
     }
 
-    // fallback-демо, якщо відкрили просто в браузері
     if (!stops.length) {
       stops = [
         { id: 1, lat: 51.7005, lng: 8.7642, address: "Warburger Straße 3A, Paderborn", done: false, label: 1, regionGroup: 1, regionColor: "#ef4444" },
@@ -189,22 +189,10 @@
       ];
     }
 
-    // ---------- УНІКАЛЬНІ КОЛЬОРИ ДЛЯ РАЙОНІВ ----------
-    // Логіка: stopsParam формується по районах підряд, а label у кожному районі починається з 1.
-    // Тому: коли зустріли label==1 і це НЕ перший елемент — це початок нового району.
     const REGION_COLORS = [
-      "#ef4444", // red
-      "#3b82f6", // blue
-      "#eab308", // yellow
-      "#a855f7", // purple
-      "#22c55e", // green
-      "#f97316", // orange
-      "#14b8a6", // teal
-      "#ec4899", // pink
-      "#84cc16", // lime
-      "#06b6d4", // cyan
-      "#f43f5e", // rose
-      "#8b5cf6", // violet
+      "#ef4444", "#3b82f6", "#eab308", "#a855f7",
+      "#22c55e", "#f97316", "#14b8a6", "#ec4899",
+      "#84cc16", "#06b6d4", "#f43f5e", "#8b5cf6",
     ];
 
     let regionGroup = 1;
@@ -221,7 +209,6 @@
 
     const markers = new Map();
 
-    // ---------- КАРТА ----------
     const map = L.map("map");
 
     if (stops.length > 0) {
@@ -249,7 +236,6 @@
 
       const isSelected = selectedStopId === id;
 
-      // ✅ done: сірий, not done: колір району
       const bgColor = stop.done ? "#6b7280" : (stop.regionColor || "#ef4444");
       const borderColor = isSelected ? "#22c55e" : "#ffffff";
       const size = isSelected ? 28 : 22;
@@ -297,7 +283,6 @@
 
       const statusText = stop.done ? "✅ Доставлено" : "❌ Ще не доставлено";
 
-      // ✅ прибрали "Район #..." — залишили тільки кольорову крапку
       infoEl.innerHTML = `
         <div class="addr">${stop.address}</div>
         <div class="status">${statusText}</div>
@@ -328,9 +313,7 @@
       selectedStopId = id;
       markers.forEach((_m, key) => updateMarkerStyle(key));
       const stop = getStopById(id);
-      if (stop) {
-        map.panTo([stop.lat, stop.lng]);
-      }
+      if (stop) map.panTo([stop.lat, stop.lng]);
       renderInfo();
       updateGmapsButton(stop);
     }
@@ -342,7 +325,6 @@
       marker.on("click", () => {
         selectStop(stop.id);
 
-        // ✅ popup: адреса + номер зупинки (без району)
         const popupHtml =
           `<b>${stop.address}</b><br>` +
           `Зупинка: #${stop.label}`;
@@ -360,7 +342,6 @@
       currentGmapsUrl = null;
     }
 
-    // ---------- МАРКЕР ПОЗИЦІЇ ВОДІЯ (плавно + частіше) ----------
     let userMarker = null;
     let lastUserPos = null;
     let watchId = null;
@@ -377,7 +358,6 @@
         marker.setLatLng([lat, lng]);
         if (t < 1) requestAnimationFrame(step);
       }
-
       requestAnimationFrame(step);
     }
 
@@ -418,7 +398,6 @@
       );
     }
 
-    // ---------- КНОПКИ "ВИКОНАНО" / "ПОВЕРНУТИ" / "GMAPS" ----------
     btnComplete.addEventListener("click", () => {
       if (selectedStopId == null) return;
       const stop = getStopById(selectedStopId);
@@ -429,12 +408,7 @@
       renderInfo();
 
       if (tg) {
-        tg.sendData(
-          JSON.stringify({
-            action: "complete",
-            stop_id: stop.id,
-          })
-        );
+        tg.sendData(JSON.stringify({ action: "complete", stop_id: stop.id }));
       } else {
         console.log("Demo complete:", stop.id);
       }
