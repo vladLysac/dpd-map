@@ -83,6 +83,8 @@
       opacity: 0.85;
       margin-top: 2px;
     }
+
+    /* ✅ лишаємо тільки крапку кольору району (без тексту Район #...) */
     #info .region {
       margin-top: 6px;
       display: inline-flex;
@@ -247,9 +249,7 @@
 
       const isSelected = selectedStopId === id;
 
-      // ✅ ВАЖЛИВО:
-      // - якщо done: сірий
-      // - якщо not done: колір району
+      // ✅ done: сірий, not done: колір району
       const bgColor = stop.done ? "#6b7280" : (stop.regionColor || "#ef4444");
       const borderColor = isSelected ? "#22c55e" : "#ffffff";
       const size = isSelected ? 28 : 22;
@@ -296,14 +296,13 @@
       }
 
       const statusText = stop.done ? "✅ Доставлено" : "❌ Ще не доставлено";
-      const regionText = `Район #${stop.regionGroup}`;
 
+      // ✅ прибрали "Район #..." — залишили тільки кольорову крапку
       infoEl.innerHTML = `
         <div class="addr">${stop.address}</div>
         <div class="status">${statusText}</div>
         <div class="region">
           <span class="dot" style="background:${stop.regionColor};"></span>
-          <span>${regionText} (колір району)</span>
         </div>
       `;
     }
@@ -343,11 +342,10 @@
       marker.on("click", () => {
         selectStop(stop.id);
 
-        // popup: адреса + номер зупинки + район
+        // ✅ popup: адреса + номер зупинки (без району)
         const popupHtml =
           `<b>${stop.address}</b><br>` +
-          `Зупинка: #${stop.label}<br>` +
-          `Район: #${stop.regionGroup}`;
+          `Зупинка: #${stop.label}`;
 
         marker.bindPopup(popupHtml, { autoClose: true }).openPopup();
       });
