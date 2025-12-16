@@ -136,7 +136,28 @@
     showError("Помилка: Leaflet не завантажився (об'єкт L відсутній).");
   } else {
     const params = new URLSearchParams(window.location.search);
-    const stopsParam = params.get("stops");
+
+    // ✅ ГОЛОВНА ФІКСА: підтримка довгих URL через stops + stops2 + stops3...
+    // (Telegram/браузер можуть обрізати один дуже довгий параметр)
+    function collectStopsParam(p) {
+      let combined = "";
+
+      // 1) якщо є stops — додаємо першим
+      const first = p.get("stops");
+      if (first) combined += first;
+
+      // 2) додаємо stops2..stops99 якщо є
+      for (let i = 2; i <= 99; i++) {
+        const key = "stops" + i;
+        const part = p.get(key);
+        if (!part) break;
+        combined += part;
+      }
+
+      return combined;
+    }
+
+    const stopsParam = collectStopsParam(params);
     const currentIdFromUrl = parseInt(params.get("current") || "0", 10);
 
     let stops = [];
@@ -147,7 +168,7 @@
 
     if (stopsParam) {
       // Формат: id,lat,lng,done,label,addressEncoded
-      // ✅ Надійність: якщо раптом у майбутньому "прилетить" зайва кома — адреса не зламає парсер.
+      // Адреса може містити коми => вона йде "хвостом" після 5-го елемента
       stops = stopsParam
         .split("|")
         .map((chunk, index) => {
@@ -169,8 +190,6 @@
             if (!isNaN(parsedLabel)) label = parsedLabel;
           }
 
-          // ✅ Оце головна правка:
-          // адреса може бути "хвостом" після 5-го елемента — склеюємо назад через кому
           if (parts.length >= 6) {
             const addrEnc = parts.slice(5).join(",");
             if (addrEnc !== "") address = safeDecode(addrEnc);
@@ -181,6 +200,7 @@
         .filter(Boolean);
     }
 
+    // demo fallback
     if (!stops.length) {
       stops = [
         { id: 1, lat: 51.7005, lng: 8.7642, address: "Warburger Straße 3A, Paderborn", done: false, label: 1, regionGroup: 1, regionColor: "#ef4444" },
@@ -195,6 +215,8 @@
       "#84cc16", "#06b6d4", "#f43f5e", "#8b5cf6",
     ];
 
+    // ✅ УНІКАЛЬНИЙ КОЛІР КОЖНОГО РАЙОНУ:
+    // правило: якщо label==1 (і це НЕ перша точка) -> починається новий район
     let regionGroup = 1;
     stops.forEach((s, i) => {
       if (i > 0 && s.label === 1) regionGroup++;
@@ -208,7 +230,6 @@
       null;
 
     const markers = new Map();
-
     const map = L.map("map");
 
     if (stops.length > 0) {
@@ -288,6 +309,7 @@
         <div class="status">${statusText}</div>
         <div class="region">
           <span class="dot" style="background:${stop.regionColor};"></span>
+          <span>Район #${stop.regionGroup}</span>
         </div>
       `;
     }
@@ -327,7 +349,8 @@
 
         const popupHtml =
           `<b>${stop.address}</b><br>` +
-          `Зупинка: #${stop.label}`;
+          `Зупинка: #${stop.label}<br>` +
+          `Район: #${stop.regionGroup}`;
 
         marker.bindPopup(popupHtml, { autoClose: true }).openPopup();
       });
@@ -342,6 +365,7 @@
       currentGmapsUrl = null;
     }
 
+    // Геолокація
     let userMarker = null;
     let lastUserPos = null;
     let watchId = null;
@@ -398,6 +422,7 @@
       );
     }
 
+    // Кнопки
     btnComplete.addEventListener("click", () => {
       if (selectedStopId == null) return;
       const stop = getStopById(selectedStopId);
