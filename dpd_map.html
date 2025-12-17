@@ -12,6 +12,9 @@
   <link rel="stylesheet" href="leaflet.css" />
   <script src="leaflet.js"></script>
 
+  <!-- ✅ ДОДАНО: плагін ротації Leaflet -->
+  <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
+
   <style>
     html, body {
       margin: 0;
@@ -230,7 +233,9 @@
       null;
 
     const markers = new Map();
-    const map = L.map("map");
+
+    // ✅ ДОДАНО: rotate:true (вмикає ротацію, якщо плагін завантажився)
+    const map = L.map("map", { rotate: true, bearing: 0 });
 
     if (stops.length > 0) {
       const avgLat = stops.reduce((sum, s) => sum + s.lat, 0) / stops.length;
@@ -244,6 +249,44 @@
       maxZoom: 19,
       attribution: "&copy; OpenStreetMap contributors",
     }).addTo(map);
+
+    // ✅ ДОДАНО: зручне керування ротацією
+    // ПК: Shift + колесо миші = поворот
+    // Mobile: двома пальцями (якщо Telegram WebView дозволяє)
+    (function enableRotationControls() {
+      try {
+        if (map.touchRotate && map.touchRotate.enable) {
+          map.touchRotate.enable();
+        }
+
+        const container = map.getContainer();
+        container.addEventListener("wheel", (e) => {
+          // Ротація тільки коли затиснутий Shift, інакше звичайний зум як був
+          if (!e.shiftKey) return;
+
+          // Блокуємо скрол/зум тільки в режимі ротації
+          e.preventDefault();
+
+          if (!map.getBearing || !map.setBearing) return;
+
+          const step = 6; // градусів за “клік” колеса
+          const dir = (e.deltaY > 0) ? step : -step;
+
+          let b = map.getBearing() || 0;
+          b = (b + dir) % 360;
+          if (b < 0) b += 360;
+          map.setBearing(b);
+        }, { passive: false });
+
+        // Швидкий “скид на північ”: Shift + подвійний клік
+        container.addEventListener("dblclick", (e) => {
+          if (!e.shiftKey) return;
+          if (map.setBearing) map.setBearing(0);
+        });
+      } catch (err) {
+        console.log("Rotation init error:", err);
+      }
+    })();
 
     function getStopById(id) {
       return stops.find((s) => s.id === id);
