@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="leaflet.css" />
   <script src="leaflet.js"></script>
 
-  <!-- ✅ ДОДАНО: плагін ротації Leaflet -->
+  <!-- ✅ Плагін ротації Leaflet -->
   <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
 
   <style>
@@ -141,22 +141,17 @@
     const params = new URLSearchParams(window.location.search);
 
     // ✅ ГОЛОВНА ФІКСА: підтримка довгих URL через stops + stops2 + stops3...
-    // (Telegram/браузер можуть обрізати один дуже довгий параметр)
     function collectStopsParam(p) {
       let combined = "";
-
-      // 1) якщо є stops — додаємо першим
       const first = p.get("stops");
       if (first) combined += first;
 
-      // 2) додаємо stops2..stops99 якщо є
       for (let i = 2; i <= 99; i++) {
         const key = "stops" + i;
         const part = p.get(key);
         if (!part) break;
         combined += part;
       }
-
       return combined;
     }
 
@@ -170,8 +165,6 @@
     }
 
     if (stopsParam) {
-      // Формат: id,lat,lng,done,label,addressEncoded
-      // Адреса може містити коми => вона йде "хвостом" після 5-го елемента
       stops = stopsParam
         .split("|")
         .map((chunk, index) => {
@@ -203,7 +196,6 @@
         .filter(Boolean);
     }
 
-    // demo fallback
     if (!stops.length) {
       stops = [
         { id: 1, lat: 51.7005, lng: 8.7642, address: "Warburger Straße 3A, Paderborn", done: false, label: 1, regionGroup: 1, regionColor: "#ef4444" },
@@ -218,8 +210,6 @@
       "#84cc16", "#06b6d4", "#f43f5e", "#8b5cf6",
     ];
 
-    // ✅ УНІКАЛЬНИЙ КОЛІР КОЖНОГО РАЙОНУ:
-    // правило: якщо label==1 (і це НЕ перша точка) -> починається новий район
     let regionGroup = 1;
     stops.forEach((s, i) => {
       if (i > 0 && s.label === 1) regionGroup++;
@@ -234,7 +224,7 @@
 
     const markers = new Map();
 
-    // ✅ ДОДАНО: rotate:true (вмикає ротацію, якщо плагін завантажився)
+    // ✅ Вмикаємо ротацію (плагін)
     const map = L.map("map", { rotate: true, bearing: 0 });
 
     if (stops.length > 0) {
@@ -250,41 +240,77 @@
       attribution: "&copy; OpenStreetMap contributors",
     }).addTo(map);
 
-    // ✅ ДОДАНО: зручне керування ротацією
-    // ПК: Shift + колесо миші = поворот
-    // Mobile: двома пальцями (якщо Telegram WebView дозволяє)
-    (function enableRotationControls() {
+    // ✅ ДОДАНО: реальний поворот 2 пальцями (twist) для мобільного Telegram WebView
+    (function enableMobileTwistRotate() {
       try {
-        if (map.touchRotate && map.touchRotate.enable) {
-          map.touchRotate.enable();
+        const container = map.getContainer();
+        if (!container || !map.setBearing || !map.getBearing) return;
+
+        // щоб pointer events працювали стабільно
+        container.style.touchAction = "manipulation";
+
+        const pointers = new Map(); // id -> {x,y}
+        let rotating = false;
+        let startAngle = 0;
+        let startBearing = 0;
+
+        function angleBetween(p1, p2) {
+          return Math.atan2(p2.y - p1.y, p2.x - p1.x); // radians
+        }
+        function radToDeg(r) {
+          return r * 180 / Math.PI;
+        }
+        function normalizeDeg(d) {
+          d = d % 360;
+          if (d < 0) d += 360;
+          return d;
         }
 
-        const container = map.getContainer();
-        container.addEventListener("wheel", (e) => {
-          // Ротація тільки коли затиснутий Shift, інакше звичайний зум як був
-          if (!e.shiftKey) return;
+        container.addEventListener("pointerdown", (e) => {
+          pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-          // Блокуємо скрол/зум тільки в режимі ротації
+          if (pointers.size === 2) {
+            const arr = Array.from(pointers.values());
+            startAngle = angleBetween(arr[0], arr[1]);
+            startBearing = map.getBearing() || 0;
+            rotating = false; // стане true тільки коли реально “крутять”
+          }
+        }, { passive: true });
+
+        container.addEventListener("pointermove", (e) => {
+          if (!pointers.has(e.pointerId)) return;
+          pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+          if (pointers.size !== 2) return;
+
+          const arr = Array.from(pointers.values());
+          const a = angleBetween(arr[0], arr[1]);
+          const deltaDeg = radToDeg(a - startAngle);
+
+          // якщо поворот маленький — не втручаємось (даємо пан/зум працювати як було)
+          if (!rotating) {
+            if (Math.abs(deltaDeg) < 6) return; // поріг "це вже поворот"
+            rotating = true;
+          }
+
+          // тут уже точно поворот — блокуємо стандартні жести
           e.preventDefault();
 
-          if (!map.getBearing || !map.setBearing) return;
-
-          const step = 6; // градусів за “клік” колеса
-          const dir = (e.deltaY > 0) ? step : -step;
-
-          let b = map.getBearing() || 0;
-          b = (b + dir) % 360;
-          if (b < 0) b += 360;
-          map.setBearing(b);
+          const newBearing = normalizeDeg(startBearing + deltaDeg);
+          map.setBearing(newBearing);
         }, { passive: false });
 
-        // Швидкий “скид на північ”: Shift + подвійний клік
-        container.addEventListener("dblclick", (e) => {
-          if (!e.shiftKey) return;
-          if (map.setBearing) map.setBearing(0);
-        });
+        function endPointer(e) {
+          if (pointers.has(e.pointerId)) pointers.delete(e.pointerId);
+          if (pointers.size < 2) rotating = false;
+        }
+
+        container.addEventListener("pointerup", endPointer, { passive: true });
+        container.addEventListener("pointercancel", endPointer, { passive: true });
+        container.addEventListener("pointerout", endPointer, { passive: true });
+        container.addEventListener("pointerleave", endPointer, { passive: true });
       } catch (err) {
-        console.log("Rotation init error:", err);
+        console.log("Mobile rotate init error:", err);
       }
     })();
 
