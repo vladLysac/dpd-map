@@ -68,6 +68,14 @@
       opacity: 0.5;
       cursor: default;
     }
+
+    /* ✅ ДОДАНО: кнопка "Де я" */
+    #btn-me {
+      background: #111827;
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+
     #info {
       padding: 6px 0 0;
       font-size: 12px;
@@ -101,6 +109,12 @@
       border: 2px solid #fff;
       box-sizing: border-box;
     }
+
+    /* ✅ ГОЛОВНА ФІКСА: забороняємо кліки по атрибуції (щоб не відкривало leafletjs.com) */
+    .leaflet-control-attribution,
+    .leaflet-control-attribution a {
+      pointer-events: none !important;
+    }
   </style>
 </head>
 <body>
@@ -109,6 +123,7 @@
   <div id="controls">
     <button id="btn-undo">↩️ Повернути</button>
     <button id="btn-complete">✅ Виконано</button>
+    <button id="btn-me">📍 Де я</button>
     <button id="btn-gmaps" disabled>🚗 Маршрут у Google Maps</button>
     <div id="info"></div>
   </div>
@@ -240,22 +255,28 @@
       attribution: "&copy; OpenStreetMap contributors",
     }).addTo(map);
 
+    /* ✅ ГОЛОВНА ФІКСА №2: прибираємо Leaflet “prefix” (він і є посиланням на leafletjs.com) */
+    try {
+      if (map.attributionControl && map.attributionControl.setPrefix) {
+        map.attributionControl.setPrefix("");
+      }
+    } catch (e) {}
+
     // ✅ ДОДАНО: реальний поворот 2 пальцями (twist) для мобільного Telegram WebView
     (function enableMobileTwistRotate() {
       try {
         const container = map.getContainer();
         if (!container || !map.setBearing || !map.getBearing) return;
 
-        // щоб pointer events працювали стабільно
         container.style.touchAction = "manipulation";
 
-        const pointers = new Map(); // id -> {x,y}
+        const pointers = new Map();
         let rotating = false;
         let startAngle = 0;
         let startBearing = 0;
 
         function angleBetween(p1, p2) {
-          return Math.atan2(p2.y - p1.y, p2.x - p1.x); // radians
+          return Math.atan2(p2.y - p1.y, p2.x - p1.x);
         }
         function radToDeg(r) {
           return r * 180 / Math.PI;
@@ -273,7 +294,7 @@
             const arr = Array.from(pointers.values());
             startAngle = angleBetween(arr[0], arr[1]);
             startBearing = map.getBearing() || 0;
-            rotating = false; // стане true тільки коли реально “крутять”
+            rotating = false;
           }
         }, { passive: true });
 
@@ -287,13 +308,11 @@
           const a = angleBetween(arr[0], arr[1]);
           const deltaDeg = radToDeg(a - startAngle);
 
-          // якщо поворот маленький — не втручаємось (даємо пан/зум працювати як було)
           if (!rotating) {
-            if (Math.abs(deltaDeg) < 6) return; // поріг "це вже поворот"
+            if (Math.abs(deltaDeg) < 6) return;
             rotating = true;
           }
 
-          // тут уже точно поворот — блокуємо стандартні жести
           e.preventDefault();
 
           const newBearing = normalizeDeg(startBearing + deltaDeg);
@@ -361,6 +380,7 @@
     const infoEl = document.getElementById("info");
     const btnComplete = document.getElementById("btn-complete");
     const btnUndo = document.getElementById("btn-undo");
+    const btnMe = document.getElementById("btn-me");
     const btnGmaps = document.getElementById("btn-gmaps");
     let currentGmapsUrl = null;
 
@@ -490,6 +510,43 @@
         }
       );
     }
+
+    // ✅ ДОДАНО: кнопка "Де я" — швидко центрує карту на позиції
+    btnMe.addEventListener("click", () => {
+      if (lastUserPos) {
+        map.setView(lastUserPos, Math.max(map.getZoom(), 17), { animate: true });
+        if (userMarker) userMarker.openPopup();
+        return;
+      }
+
+      // якщо ще не прийшла позиція — спробувати один раз отримати
+      if (!navigator.geolocation) return;
+
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords;
+          lastUserPos = [latitude, longitude];
+          map.setView(lastUserPos, Math.max(map.getZoom(), 17), { animate: true });
+
+          if (!userMarker) {
+            userMarker = L.circleMarker(lastUserPos, {
+              radius: 8,
+              fillColor: "#4ade80",
+              color: "#22c55e",
+              weight: 2,
+              opacity: 1,
+              fillOpacity: 1,
+            }).addTo(map);
+            userMarker.bindPopup("Ти тут 😊");
+          }
+          userMarker.openPopup();
+        },
+        (err) => {
+          console.log("Geo getCurrentPosition error", err);
+        },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+      );
+    });
 
     // Кнопки
     btnComplete.addEventListener("click", () => {
