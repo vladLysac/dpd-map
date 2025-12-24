@@ -4,13 +4,17 @@
   <meta charset="UTF-8" />
   <title>DPD Route Map</title>
 
+  <!-- ✅ ФІКС: блокуємо зум всієї сторінки (щоб не зникали кнопки), зум працює тільки в Leaflet -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 
+  <!-- Telegram WebApp SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
+  <!-- Leaflet локально з цього ж домену -->
   <link rel="stylesheet" href="leaflet.css" />
   <script src="leaflet.js"></script>
 
+  <!-- ✅ Плагін ротації Leaflet -->
   <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
 
   <style>
@@ -21,14 +25,26 @@
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: #111;
       color: #fff;
+
+      /* ✅ ФІКС: щоб при жестах/скролі не "їхала" сторінка */
       overflow: hidden;
       overscroll-behavior: none;
       touch-action: manipulation;
     }
 
-    #app { display: flex; flex-direction: column; height: 100%; }
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
 
-    #map { flex: 1; min-height: 200px; touch-action: none; }
+    #map {
+      flex: 1;
+      min-height: 200px;
+
+      /* ✅ ФІКС: пріоритет жестів у карти, а не в сторінки */
+      touch-action: none;
+    }
 
     #controls {
       padding: 8px;
@@ -56,12 +72,14 @@
     #btn-gmaps { background: #2563eb; color: #fff; }
     #btn-gmaps:disabled { opacity: 0.5; cursor: default; }
 
+    /* ✅ ДОДАНО: кнопка "Де я" */
     #btn-me {
       background: #111827;
       color: #fff;
       border: 1px solid rgba(255,255,255,0.15);
     }
 
+    /* ✅ ДОДАНО: кнопка "Слідкувати" */
     #btn-follow {
       background: #0b1220;
       color: #fff;
@@ -81,11 +99,33 @@
       flex-basis: 100%;
       line-height: 1.25;
     }
-    #info .addr { font-size: 13px; font-weight: 700; opacity: 1; }
-    #info .status { font-size: 12px; opacity: 0.85; margin-top: 2px; }
-    #info .region { margin-top: 6px; display: inline-flex; align-items: center; gap: 8px; font-size: 12px; opacity: 0.95; }
-    #info .dot { width: 12px; height: 12px; border-radius: 999px; border: 2px solid #fff; box-sizing: border-box; }
+    #info .addr {
+      font-size: 13px;
+      font-weight: 700;
+      opacity: 1;
+    }
+    #info .status {
+      font-size: 12px;
+      opacity: 0.85;
+      margin-top: 2px;
+    }
+    #info .region {
+      margin-top: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      opacity: 0.95;
+    }
+    #info .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      border: 2px solid #fff;
+      box-sizing: border-box;
+    }
 
+    /* ✅ ГОЛОВНА ФІКСА: забороняємо кліки по атрибуції (щоб не відкривало leafletjs.com) */
     .leaflet-control-attribution,
     .leaflet-control-attribution a {
       pointer-events: none !important;
@@ -126,6 +166,7 @@
     console.log("Running outside Telegram WebApp – demo mode.");
   }
 
+  /* ✅ ДОДАТКОВИЙ ФІКС (особливо iOS): прибираємо системний pinch-zoom сторінки */
   (function blockPagePinchZoom(){
     try{
       document.addEventListener("gesturestart", function(e){ e.preventDefault(); }, { passive:false });
@@ -139,6 +180,7 @@
   } else {
     const params = new URLSearchParams(window.location.search);
 
+    // ✅ ГОЛОВНА ФІКСА: підтримка довгих URL через stops + stops2 + stops3...
     function collectStopsParam(p) {
       let combined = "";
       const first = p.get("stops");
@@ -158,7 +200,9 @@
 
     let stops = [];
 
-    function safeDecode(s) { try { return decodeURIComponent(s); } catch (e) { return s; } }
+    function safeDecode(s) {
+      try { return decodeURIComponent(s); } catch (e) { return s; }
+    }
 
     if (stopsParam) {
       stops = stopsParam
@@ -171,6 +215,7 @@
           const lat = parseFloat(parts[1]);
           const lng = parseFloat(parts[2]);
           const done = parts[3] === "1";
+
           if (isNaN(lat) || isNaN(lng) || isNaN(id)) return null;
 
           let label = index + 1;
@@ -219,6 +264,7 @@
 
     const markers = new Map();
 
+    // ✅ Вмикаємо ротацію (плагін)
     const map = L.map("map", { rotate: true, bearing: 0 });
 
     if (stops.length > 0) {
@@ -234,12 +280,14 @@
       attribution: "&copy; OpenStreetMap contributors",
     }).addTo(map);
 
+    /* ✅ ГОЛОВНА ФІКСА №2: прибираємо Leaflet “prefix” (він і є посиланням на leafletjs.com) */
     try {
       if (map.attributionControl && map.attributionControl.setPrefix) {
         map.attributionControl.setPrefix("");
       }
     } catch (e) {}
 
+    // ✅ ДОДАНО: реальний поворот 2 пальцями (twist) для мобільного Telegram WebView
     (function enableMobileTwistRotate() {
       try {
         const container = map.getContainer();
@@ -301,7 +349,9 @@
       }
     })();
 
-    function getStopById(id) { return stops.find((s) => s.id === id); }
+    function getStopById(id) {
+      return stops.find((s) => s.id === id);
+    }
 
     function updateMarkerStyle(id) {
       const marker = markers.get(id);
@@ -310,6 +360,7 @@
       if (!stop) return;
 
       const isSelected = selectedStopId === id;
+
       const bgColor = stop.done ? "#6b7280" : (stop.regionColor || "#ef4444");
       const borderColor = isSelected ? "#22c55e" : "#ffffff";
       const size = isSelected ? 28 : 22;
@@ -352,8 +403,13 @@
 
     function renderInfo() {
       const stop = getStopById(selectedStopId);
-      if (!stop) { infoEl.innerHTML = ""; return; }
+      if (!stop) {
+        infoEl.innerHTML = "";
+        return;
+      }
+
       const statusText = stop.done ? "✅ Доставлено" : "❌ Ще не доставлено";
+
       infoEl.innerHTML = `
         <div class="addr">${stop.address}</div>
         <div class="status">${statusText}</div>
@@ -365,12 +421,19 @@
     }
 
     function updateGmapsButton(stop) {
-      if (!stop) { currentGmapsUrl = null; btnGmaps.disabled = true; return; }
+      if (!stop) {
+        currentGmapsUrl = null;
+        btnGmaps.disabled = true;
+        return;
+      }
+
       const dest = `${stop.lat},${stop.lng}`;
-      currentGmapsUrl =
+      const gmapsUrl =
         "https://www.google.com/maps/dir/?api=1&destination=" +
         encodeURIComponent(dest) +
         "&travelmode=driving";
+
+      currentGmapsUrl = gmapsUrl;
       btnGmaps.disabled = false;
     }
 
@@ -389,18 +452,24 @@
 
       marker.on("click", () => {
         selectStop(stop.id);
+
         const popupHtml =
           `<b>${stop.address}</b><br>` +
           `Зупинка: #${stop.label}<br>` +
           `Район: #${stop.regionGroup}`;
+
         marker.bindPopup(popupHtml, { autoClose: true }).openPopup();
       });
 
       updateMarkerStyle(stop.id);
     });
 
-    if (selectedStopId !== null) selectStop(selectedStopId);
-    else { btnGmaps.disabled = true; currentGmapsUrl = null; }
+    if (selectedStopId !== null) {
+      selectStop(selectedStopId);
+    } else {
+      btnGmaps.disabled = true;
+      currentGmapsUrl = null;
+    }
 
     // Геолокація
     let userMarker = null;
@@ -423,12 +492,14 @@
     }
 
     // ===============================
-    // ✅ FOLLOW + AUTO-ROTATE (FIXED)
+    // ✅ FOLLOW + AUTO-ROTATE (ANTI-JITTER)
     // ===============================
     let followEnabled = false;
 
+    // --- rotation smoothing + jitter filters ---
     let currentBearing = 0;
     let bearingRaf = null;
+
     function normalizeDeg(d) { d = d % 360; if (d < 0) d += 360; return d; }
     function shortestDelta(from, to) {
       let d = normalizeDeg(to) - normalizeDeg(from);
@@ -436,19 +507,31 @@
       if (d < -180) d += 360;
       return d;
     }
+
+    // ✅ "ручки" анти-смикання
+    const ROTATE_DEADZONE_DEG = 4;      // менше — ігноруємо
+    const ROTATE_MAX_STEP_DEG = 25;     // більші стрибки — шум
+    const COMPASS_HZ_LIMIT = 10;        // максимум оновлень/сек
+    const COMPASS_ALPHA = 0.18;         // 0..1 (менше = плавніше)
+
     function setBearingSmooth(targetDeg, duration = 220) {
       if (!map.setBearing) return;
       targetDeg = normalizeDeg(targetDeg);
 
-      const start = performance.now();
-      const startBearing = (map.getBearing && map.getBearing()) ? map.getBearing() : currentBearing;
+      const startBearing = (map.getBearing && map.getBearing() != null) ? map.getBearing() : currentBearing;
       const delta = shortestDelta(startBearing, targetDeg);
 
+      // ✅ deadzone
+      if (Math.abs(delta) < ROTATE_DEADZONE_DEG) return;
+      // ✅ block crazy spikes
+      if (Math.abs(delta) > ROTATE_MAX_STEP_DEG) return;
+
+      const start = performance.now();
       if (bearingRaf) cancelAnimationFrame(bearingRaf);
 
       function step(now) {
         const t = Math.min(1, (now - start) / duration);
-        const eased = 1 - Math.pow(1 - t, 3);
+        const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
         const b = normalizeDeg(startBearing + delta * eased);
         currentBearing = b;
         map.setBearing(b);
@@ -457,35 +540,55 @@
       bearingRaf = requestAnimationFrame(step);
     }
 
-    let lastHeadingDeg = null;
-    let lastCompassDeg = null;
+    // --- heading sources ---
+    let lastHeadingDeg = null;      // GPS heading
+    let lastSpeed = null;           // m/s
+    let lastCompassDeg = null;      // raw compass
+    let filteredCompassDeg = null;  // filtered compass
     let compassActive = false;
+    let lastCompassTs = 0;
 
     function setFollowUI() {
       if (followEnabled) btnFollow.classList.add("active");
       else btnFollow.classList.remove("active");
     }
 
-    // ✅ ГОЛОВНИЙ ФІКС: крутити карту прямо з подій компаса
+    function circularLerpDeg(from, to, alpha) {
+      const d = shortestDelta(from, to);
+      return normalizeDeg(from + d * alpha);
+    }
+
     function attachCompassListeners() {
       if (compassActive) return;
 
       function handleOrientation(e) {
+        const now = performance.now();
+        const minDt = 1000 / COMPASS_HZ_LIMIT;
+        if (now - lastCompassTs < minDt) return; // ✅ rate limit
+        lastCompassTs = now;
+
         let deg = null;
 
+        // iOS
         if (typeof e.webkitCompassHeading === "number") {
           deg = normalizeDeg(e.webkitCompassHeading);
         } else if (typeof e.alpha === "number") {
+          // Android fallback (rough)
           deg = normalizeDeg(360 - e.alpha);
         }
 
-        if (typeof deg === "number") {
-          lastCompassDeg = deg;
+        if (typeof deg !== "number") return;
 
-          // ✅ ОЦЕ І Є ФІКС: крутимо одразу, навіть якщо GPS не оновлюється
-          if (followEnabled) {
-            setBearingSmooth(lastCompassDeg, 140);
-          }
+        lastCompassDeg = deg;
+
+        // ✅ low-pass (circular) filter
+        if (filteredCompassDeg == null) filteredCompassDeg = deg;
+        else filteredCompassDeg = circularLerpDeg(filteredCompassDeg, deg, COMPASS_ALPHA);
+
+        // ✅ rotate immediately ONLY if follow is enabled AND not moving fast
+        const movingFast = (typeof lastSpeed === "number" && lastSpeed > 2.0); // > ~7.2 km/h
+        if (followEnabled && !movingFast) {
+          setBearingSmooth(filteredCompassDeg, 160);
         }
       }
 
@@ -501,7 +604,7 @@
           const res = await DeviceOrientationEvent.requestPermission();
           return res === "granted";
         }
-        return true; // Android зазвичай без цього
+        return true;
       } catch (e) {
         return false;
       }
@@ -511,7 +614,6 @@
       followEnabled = true;
       setFollowUI();
 
-      // ✅ просимо доступ до сенсорів при кліку (правильний момент)
       const ok = await requestCompassPermissionIfNeeded();
       if (ok) attachCompassListeners();
 
@@ -520,7 +622,7 @@
       }
 
       const h = (typeof lastHeadingDeg === "number") ? lastHeadingDeg :
-                (typeof lastCompassDeg === "number" ? lastCompassDeg : null);
+                (typeof filteredCompassDeg === "number" ? filteredCompassDeg : null);
       if (typeof h === "number") setBearingSmooth(h, 200);
     }
 
@@ -529,6 +631,7 @@
       setFollowUI();
     }
 
+    // Google Maps behavior: if user drags/zooms/rotates manually -> stop follow
     map.on("dragstart", () => { if (followEnabled) disableFollow(); });
     map.on("zoomstart", () => { if (followEnabled) disableFollow(); });
     map.on("rotatestart", () => { if (followEnabled) disableFollow(); });
@@ -538,7 +641,7 @@
       else enableFollow();
     });
 
-    // ✅ GPS
+    // ✅ Геолокація + Follow
     if (navigator.geolocation) {
       if (watchId !== null) navigator.geolocation.clearWatch(watchId);
 
@@ -546,6 +649,9 @@
         (pos) => {
           const { latitude, longitude, accuracy, heading, speed } = pos.coords;
           const latlng = [latitude, longitude];
+
+          // ✅ зберігаємо швидкість для пріоритету GPS/компас
+          lastSpeed = (typeof speed === "number" ? speed : null);
 
           if (userMarker && accuracy && accuracy > 120) return;
 
@@ -565,28 +671,39 @@
             lastUserPos = latlng;
           }
 
+          // ✅ GPS heading (best in motion)
           if (typeof heading === "number" && !isNaN(heading)) {
             lastHeadingDeg = normalizeDeg(heading);
           }
 
+          // ✅ Follow mode: center + rotate
           if (followEnabled && lastUserPos) {
             map.setView(lastUserPos, Math.max(map.getZoom(), 17), { animate: true });
 
-            const moving = (typeof speed === "number" && speed !== null && speed > 1.0);
+            const movingFast = (typeof lastSpeed === "number" && lastSpeed > 2.0);
             let h = null;
-            if (moving && typeof lastHeadingDeg === "number") h = lastHeadingDeg;
+
+            // ✅ prefer GPS heading when moving
+            if (movingFast && typeof lastHeadingDeg === "number") h = lastHeadingDeg;
+            else if (!movingFast && typeof filteredCompassDeg === "number") h = filteredCompassDeg;
             else if (typeof lastHeadingDeg === "number") h = lastHeadingDeg;
-            else if (typeof lastCompassDeg === "number") h = lastCompassDeg;
+            else if (typeof filteredCompassDeg === "number") h = filteredCompassDeg;
 
             if (typeof h === "number") setBearingSmooth(h, 220);
           }
         },
-        (err) => { console.log("Geo error", err); },
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 8000 }
+        (err) => {
+          console.log("Geo error", err);
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 8000
+        }
       );
     }
 
-    // ✅ "Де я"
+    // ✅ ДОДАНО: кнопка "Де я"
     btnMe.addEventListener("click", () => {
       if (lastUserPos) {
         map.setView(lastUserPos, Math.max(map.getZoom(), 17), { animate: true });
@@ -615,7 +732,9 @@
           }
           userMarker.openPopup();
         },
-        (err) => { console.log("Geo getCurrentPosition error", err); },
+        (err) => {
+          console.log("Geo getCurrentPosition error", err);
+        },
         { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
       );
     });
@@ -630,13 +749,19 @@
       updateMarkerStyle(stop.id);
       renderInfo();
 
-      if (tg) tg.sendData(JSON.stringify({ action: "complete", stop_id: stop.id }));
-      else console.log("Demo complete:", stop.id);
+      if (tg) {
+        tg.sendData(JSON.stringify({ action: "complete", stop_id: stop.id }));
+      } else {
+        console.log("Demo complete:", stop.id);
+      }
     });
 
     btnUndo.addEventListener("click", () => {
-      if (tg) tg.sendData(JSON.stringify({ action: "undo" }));
-      else console.log("Demo undo");
+      if (tg) {
+        tg.sendData(JSON.stringify({ action: "undo" }));
+      } else {
+        console.log("Demo undo");
+      }
     });
 
     btnGmaps.addEventListener("click", () => {
