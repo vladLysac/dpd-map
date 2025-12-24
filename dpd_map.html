@@ -79,6 +79,18 @@
       border: 1px solid rgba(255,255,255,0.15);
     }
 
+    /* ✅ ДОДАНО: кнопка "Слідкувати" */
+    #btn-follow {
+      background: #0b1220;
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+    #btn-follow.active {
+      background: #22c55e;
+      color: #0b1220;
+      border: none;
+    }
+
     #info {
       padding: 6px 0 0;
       font-size: 12px;
@@ -127,6 +139,7 @@
     <button id="btn-undo">↩️ Повернути</button>
     <button id="btn-complete">✅ Виконано</button>
     <button id="btn-me">📍 Де я</button>
+    <button id="btn-follow">🧭 Слідкувати</button>
     <button id="btn-gmaps" disabled>🚗 Маршрут у Google Maps</button>
     <div id="info"></div>
   </div>
@@ -384,6 +397,7 @@
     const btnComplete = document.getElementById("btn-complete");
     const btnUndo = document.getElementById("btn-undo");
     const btnMe = document.getElementById("btn-me");
+    const btnFollow = document.getElementById("btn-follow");
     const btnGmaps = document.getElementById("btn-gmaps");
     let currentGmapsUrl = null;
 
@@ -477,12 +491,126 @@
       requestAnimationFrame(step);
     }
 
+    // ===============================
+    // ✅ ДОДАНО: FOLLOW + AUTO-ROTATE
+    // ===============================
+    let followEnabled = false;
+
+    // bearing smoothing
+    let currentBearing = 0;
+    let bearingRaf = null;
+    function normalizeDeg(d) { d = d % 360; if (d < 0) d += 360; return d; }
+    function shortestDelta(from, to) {
+      let d = normalizeDeg(to) - normalizeDeg(from);
+      if (d > 180) d -= 360;
+      if (d < -180) d += 360;
+      return d;
+    }
+    function setBearingSmooth(targetDeg, duration = 220) {
+      if (!map.setBearing) return;
+      targetDeg = normalizeDeg(targetDeg);
+
+      const start = performance.now();
+      const startBearing = (map.getBearing && map.getBearing()) ? map.getBearing() : currentBearing;
+      const delta = shortestDelta(startBearing, targetDeg);
+
+      if (bearingRaf) cancelAnimationFrame(bearingRaf);
+
+      function step(now) {
+        const t = Math.min(1, (now - start) / duration);
+        const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
+        const b = normalizeDeg(startBearing + delta * eased);
+        currentBearing = b;
+        map.setBearing(b);
+        if (t < 1) bearingRaf = requestAnimationFrame(step);
+      }
+      bearingRaf = requestAnimationFrame(step);
+    }
+
+    // heading sources
+    let lastHeadingDeg = null;        // from GPS or compass
+    let lastCompassDeg = null;        // from DeviceOrientation
+    let compassActive = false;
+
+    function tryEnableCompass() {
+      if (compassActive) return;
+
+      function handleOrientation(e) {
+        // iOS Safari/WebView: webkitCompassHeading
+        if (typeof e.webkitCompassHeading === "number") {
+          lastCompassDeg = normalizeDeg(e.webkitCompassHeading);
+          return;
+        }
+
+        // Android/others: alpha (0..360), but can be relative to screen; still useful as fallback
+        if (typeof e.alpha === "number") {
+          // Convert to compass-like heading (rough fallback)
+          lastCompassDeg = normalizeDeg(360 - e.alpha);
+        }
+      }
+
+      async function requestPermissionIfNeeded() {
+        try {
+          if (typeof DeviceOrientationEvent !== "undefined" &&
+              typeof DeviceOrientationEvent.requestPermission === "function") {
+            const res = await DeviceOrientationEvent.requestPermission();
+            if (res !== "granted") return false;
+          }
+          return true;
+        } catch (err) {
+          return false;
+        }
+      }
+
+      (async () => {
+        const ok = await requestPermissionIfNeeded();
+        if (!ok) return;
+
+        window.addEventListener("deviceorientation", handleOrientation, true);
+        compassActive = true;
+      })();
+    }
+
+    function setFollowUI() {
+      if (followEnabled) btnFollow.classList.add("active");
+      else btnFollow.classList.remove("active");
+    }
+
+    function enableFollow() {
+      followEnabled = true;
+      setFollowUI();
+      // try compass fallback immediately
+      tryEnableCompass();
+
+      if (lastUserPos) {
+        map.setView(lastUserPos, Math.max(map.getZoom(), 17), { animate: true });
+      }
+      // if we already have some heading -> rotate now
+      const h = (typeof lastHeadingDeg === "number") ? lastHeadingDeg : (typeof lastCompassDeg === "number" ? lastCompassDeg : null);
+      if (typeof h === "number") setBearingSmooth(h, 200);
+    }
+
+    function disableFollow() {
+      followEnabled = false;
+      setFollowUI();
+    }
+
+    // Google Maps behavior: if user drags/zooms manually -> stop following
+    map.on("dragstart", () => { if (followEnabled) disableFollow(); });
+    map.on("zoomstart", () => { if (followEnabled) disableFollow(); });
+    map.on("rotatestart", () => { if (followEnabled) disableFollow(); });
+
+    btnFollow.addEventListener("click", () => {
+      if (followEnabled) disableFollow();
+      else enableFollow();
+    });
+
     if (navigator.geolocation) {
       if (watchId !== null) navigator.geolocation.clearWatch(watchId);
 
       watchId = navigator.geolocation.watchPosition(
         (pos) => {
-          const { latitude, longitude, accuracy } = pos.coords;
+          const { latitude, longitude, accuracy, heading, speed } = pos.coords;
           const latlng = [latitude, longitude];
 
           if (userMarker && accuracy && accuracy > 120) return;
@@ -501,6 +629,33 @@
           } else {
             animateLatLngCircleMarker(userMarker, lastUserPos, latlng, 500);
             lastUserPos = latlng;
+          }
+
+          // ✅ GPS heading (best when moving)
+          if (typeof heading === "number" && !isNaN(heading)) {
+            lastHeadingDeg = normalizeDeg(heading);
+          } else {
+            // If no GPS heading, try compass (if enabled)
+            if (!compassActive) {
+              // auto-attempt: when follow is ON we will request; also ok to try silently here
+              if (followEnabled) tryEnableCompass();
+            }
+          }
+
+          // ✅ Follow mode: keep centered and rotated
+          if (followEnabled && lastUserPos) {
+            map.setView(lastUserPos, Math.max(map.getZoom(), 17), { animate: true });
+
+            // choose best available heading
+            let h = null;
+
+            // Prefer GPS heading when moving fast enough (reduces jitter)
+            const moving = (typeof speed === "number" && speed !== null && speed > 1.0); // > ~3.6 km/h
+            if (moving && typeof lastHeadingDeg === "number") h = lastHeadingDeg;
+            else if (typeof lastHeadingDeg === "number") h = lastHeadingDeg; // still can be ok
+            else if (typeof lastCompassDeg === "number") h = lastCompassDeg;
+
+            if (typeof h === "number") setBearingSmooth(h, 220);
           }
         },
         (err) => {
