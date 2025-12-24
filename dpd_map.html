@@ -79,7 +79,7 @@
       border: 1px solid rgba(255,255,255,0.15);
     }
 
-    /* ✅ ДОДАНО: кнопка "Слідкувати" */
+    /* ✅ ДОДАНО: кнопка "Слідкувати" (GPS-only) */
     #btn-follow {
       background: #0b1220;
       color: #fff;
@@ -397,8 +397,9 @@
     const btnComplete = document.getElementById("btn-complete");
     const btnUndo = document.getElementById("btn-undo");
     const btnMe = document.getElementById("btn-me");
-    const btnFollow = document.getElementById("btn-follow");
     const btnGmaps = document.getElementById("btn-gmaps");
+    const btnFollow = document.getElementById("btn-follow");
+
     let currentGmapsUrl = null;
 
     function renderInfo() {
@@ -492,13 +493,17 @@
     }
 
     // ===============================
-    // ✅ FOLLOW + AUTO-ROTATE (ANTI-JITTER)
+    // ✅ GPS-ONLY FOLLOW + AUTO-ROTATE
     // ===============================
     let followEnabled = false;
 
-    // --- rotation smoothing + jitter filters ---
-    let currentBearing = 0;
+    // анти-смикання / логіка як у навігації:
+    const MIN_SPEED_FOR_HEADING = 1.5; // m/s ~ 5.4 km/h (нижче — heading часто шумить)
+    const ROTATE_DEADZONE_DEG = 4;     // якщо різниця менша — не крутимо
+    const ROTATE_MAX_STEP_DEG = 35;    // відсікаємо дикі стрибки
     let bearingRaf = null;
+    let currentBearing = 0;
+    let lastGpsHeading = null;
 
     function normalizeDeg(d) { d = d % 360; if (d < 0) d += 360; return d; }
     function shortestDelta(from, to) {
@@ -508,11 +513,10 @@
       return d;
     }
 
-    // ✅ "ручки" анти-смикання
-    const ROTATE_DEADZONE_DEG = 4;      // менше — ігноруємо
-    const ROTATE_MAX_STEP_DEG = 25;     // більші стрибки — шум
-    const COMPASS_HZ_LIMIT = 10;        // максимум оновлень/сек
-    const COMPASS_ALPHA = 0.18;         // 0..1 (менше = плавніше)
+    function setFollowUI() {
+      if (followEnabled) btnFollow.classList.add("active");
+      else btnFollow.classList.remove("active");
+    }
 
     function setBearingSmooth(targetDeg, duration = 220) {
       if (!map.setBearing) return;
@@ -521,9 +525,7 @@
       const startBearing = (map.getBearing && map.getBearing() != null) ? map.getBearing() : currentBearing;
       const delta = shortestDelta(startBearing, targetDeg);
 
-      // ✅ deadzone
       if (Math.abs(delta) < ROTATE_DEADZONE_DEG) return;
-      // ✅ block crazy spikes
       if (Math.abs(delta) > ROTATE_MAX_STEP_DEG) return;
 
       const start = performance.now();
@@ -540,90 +542,16 @@
       bearingRaf = requestAnimationFrame(step);
     }
 
-    // --- heading sources ---
-    let lastHeadingDeg = null;      // GPS heading
-    let lastSpeed = null;           // m/s
-    let lastCompassDeg = null;      // raw compass
-    let filteredCompassDeg = null;  // filtered compass
-    let compassActive = false;
-    let lastCompassTs = 0;
-
-    function setFollowUI() {
-      if (followEnabled) btnFollow.classList.add("active");
-      else btnFollow.classList.remove("active");
-    }
-
-    function circularLerpDeg(from, to, alpha) {
-      const d = shortestDelta(from, to);
-      return normalizeDeg(from + d * alpha);
-    }
-
-    function attachCompassListeners() {
-      if (compassActive) return;
-
-      function handleOrientation(e) {
-        const now = performance.now();
-        const minDt = 1000 / COMPASS_HZ_LIMIT;
-        if (now - lastCompassTs < minDt) return; // ✅ rate limit
-        lastCompassTs = now;
-
-        let deg = null;
-
-        // iOS
-        if (typeof e.webkitCompassHeading === "number") {
-          deg = normalizeDeg(e.webkitCompassHeading);
-        } else if (typeof e.alpha === "number") {
-          // Android fallback (rough)
-          deg = normalizeDeg(360 - e.alpha);
-        }
-
-        if (typeof deg !== "number") return;
-
-        lastCompassDeg = deg;
-
-        // ✅ low-pass (circular) filter
-        if (filteredCompassDeg == null) filteredCompassDeg = deg;
-        else filteredCompassDeg = circularLerpDeg(filteredCompassDeg, deg, COMPASS_ALPHA);
-
-        // ✅ rotate immediately ONLY if follow is enabled AND not moving fast
-        const movingFast = (typeof lastSpeed === "number" && lastSpeed > 2.0); // > ~7.2 km/h
-        if (followEnabled && !movingFast) {
-          setBearingSmooth(filteredCompassDeg, 160);
-        }
-      }
-
-      window.addEventListener("deviceorientationabsolute", handleOrientation, true);
-      window.addEventListener("deviceorientation", handleOrientation, true);
-      compassActive = true;
-    }
-
-    async function requestCompassPermissionIfNeeded() {
-      try {
-        if (typeof DeviceOrientationEvent !== "undefined" &&
-            typeof DeviceOrientationEvent.requestPermission === "function") {
-          const res = await DeviceOrientationEvent.requestPermission();
-          return res === "granted";
-        }
-        return true;
-      } catch (e) {
-        return false;
-      }
-    }
-
-    async function enableFollow() {
+    function enableFollow() {
       followEnabled = true;
       setFollowUI();
-
-      const ok = await requestCompassPermissionIfNeeded();
-      if (ok) attachCompassListeners();
 
       if (lastUserPos) {
         map.setView(lastUserPos, Math.max(map.getZoom(), 17), { animate: true });
       }
-
-      const h = (typeof lastHeadingDeg === "number") ? lastHeadingDeg :
-                (typeof filteredCompassDeg === "number" ? filteredCompassDeg : null);
-      if (typeof h === "number") setBearingSmooth(h, 200);
+      if (typeof lastGpsHeading === "number") {
+        setBearingSmooth(lastGpsHeading, 200);
+      }
     }
 
     function disableFollow() {
@@ -631,17 +559,23 @@
       setFollowUI();
     }
 
-    // Google Maps behavior: if user drags/zooms/rotates manually -> stop follow
-    map.on("dragstart", () => { if (followEnabled) disableFollow(); });
-    map.on("zoomstart", () => { if (followEnabled) disableFollow(); });
-    map.on("rotatestart", () => { if (followEnabled) disableFollow(); });
-
     btnFollow.addEventListener("click", () => {
       if (followEnabled) disableFollow();
       else enableFollow();
     });
 
-    // ✅ Геолокація + Follow
+    // як у Google Maps: якщо користувач рухає карту — follow off
+    map.on("dragstart", () => { if (followEnabled) disableFollow(); });
+    map.on("zoomstart", () => { if (followEnabled) disableFollow(); });
+    map.on("rotatestart", () => { if (followEnabled) disableFollow(); });
+
+    // Переоприділяємо IDs кнопок (бо базовий код не містить btn-follow)
+    // ✅ Якщо кнопки немає (старий кеш) — просто не падаємо
+    (function ensureFollowButton(){
+      if (!btnFollow) return;
+    })();
+
+    // ⬇️ Головний watchPosition: позиція + (опційно) heading/speed
     if (navigator.geolocation) {
       if (watchId !== null) navigator.geolocation.clearWatch(watchId);
 
@@ -649,9 +583,6 @@
         (pos) => {
           const { latitude, longitude, accuracy, heading, speed } = pos.coords;
           const latlng = [latitude, longitude];
-
-          // ✅ зберігаємо швидкість для пріоритету GPS/компас
-          lastSpeed = (typeof speed === "number" ? speed : null);
 
           if (userMarker && accuracy && accuracy > 120) return;
 
@@ -671,25 +602,19 @@
             lastUserPos = latlng;
           }
 
-          // ✅ GPS heading (best in motion)
-          if (typeof heading === "number" && !isNaN(heading)) {
-            lastHeadingDeg = normalizeDeg(heading);
+          // ✅ GPS-only heading: крутимо тільки коли є рух і heading існує
+          const moving = (typeof speed === "number" && speed !== null && speed > MIN_SPEED_FOR_HEADING);
+          if (moving && typeof heading === "number" && !isNaN(heading)) {
+            lastGpsHeading = normalizeDeg(heading);
           }
 
-          // ✅ Follow mode: center + rotate
           if (followEnabled && lastUserPos) {
             map.setView(lastUserPos, Math.max(map.getZoom(), 17), { animate: true });
 
-            const movingFast = (typeof lastSpeed === "number" && lastSpeed > 2.0);
-            let h = null;
-
-            // ✅ prefer GPS heading when moving
-            if (movingFast && typeof lastHeadingDeg === "number") h = lastHeadingDeg;
-            else if (!movingFast && typeof filteredCompassDeg === "number") h = filteredCompassDeg;
-            else if (typeof lastHeadingDeg === "number") h = lastHeadingDeg;
-            else if (typeof filteredCompassDeg === "number") h = filteredCompassDeg;
-
-            if (typeof h === "number") setBearingSmooth(h, 220);
+            // rotate only when we have a valid GPS heading
+            if (typeof lastGpsHeading === "number") {
+              setBearingSmooth(lastGpsHeading, 220);
+            }
           }
         },
         (err) => {
