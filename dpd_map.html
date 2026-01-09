@@ -84,6 +84,13 @@
       border: none;
     }
 
+    /* ✅ Видалення pinned точки */
+    #btn-del-pin {
+      background: #ef4444;
+      color: #fff;
+      display: none;
+    }
+
     #info {
       padding: 6px 0 0;
       font-size: 12px;
@@ -133,6 +140,7 @@
     <button id="btn-complete">✅ Виконано</button>
     <button id="btn-follow">🧭 Слідкувати</button>
     <button id="btn-gmaps" disabled>🚗 Маршрут у Google Maps</button>
+    <button id="btn-del-pin">🗑️ Видалити точку</button>
     <div id="info"></div>
   </div>
 </div>
@@ -223,16 +231,16 @@
             if (addrEnc !== "") address = safeDecode(addrEnc);
           }
 
-          return { id, lat, lng, done, label, address, regionGroup: 0, regionColor: "#ef4444" };
+          return { id, lat, lng, done, label, address, regionGroup: 0, regionColor: "#ef4444", isPinned: false };
         })
         .filter(Boolean);
     }
 
     if (!stops.length) {
       stops = [
-        { id: 1, lat: 51.7005, lng: 8.7642, address: "Warburger Straße 3A, Paderborn", done: false, label: 1, regionGroup: 1, regionColor: "#ef4444" },
-        { id: 2, lat: 51.7020, lng: 8.7610, address: "Dahler Str. 2, Paderborn", done: false, label: 2, regionGroup: 1, regionColor: "#ef4444" },
-        { id: 3, lat: 51.7050, lng: 8.7600, address: "Sebastianstraße 7, Paderborn", done: false, label: 1, regionGroup: 2, regionColor: "#3b82f6" },
+        { id: 1, lat: 51.7005, lng: 8.7642, address: "Warburger Straße 3A, Paderborn", done: false, label: 1, regionGroup: 1, regionColor: "#ef4444", isPinned:false },
+        { id: 2, lat: 51.7020, lng: 8.7610, address: "Dahler Str. 2, Paderborn", done: false, label: 2, regionGroup: 1, regionColor: "#ef4444", isPinned:false },
+        { id: 3, lat: 51.7050, lng: 8.7600, address: "Sebastianstraße 7, Paderborn", done: false, label: 1, regionGroup: 2, regionColor: "#3b82f6", isPinned:false },
       ];
     }
 
@@ -248,6 +256,59 @@
       s.regionGroup = regionGroup;
       s.regionColor = REGION_COLORS[(regionGroup - 1) % REGION_COLORS.length];
     });
+
+    // =========================
+    // ✅ Pinned stops (long press)
+    // =========================
+    const PIN_STORE_KEY = "dpd_pinned_stops_v1";
+
+    function loadPinnedStops() {
+      try {
+        const raw = localStorage.getItem(PIN_STORE_KEY);
+        if (!raw) return [];
+        const arr = JSON.parse(raw);
+        if (!Array.isArray(arr)) return [];
+        return arr
+          .map(p => {
+            const lat = Number(p.lat);
+            const lng = Number(p.lng);
+            const id = String(p.id || "");
+            if (!id || !isFinite(lat) || !isFinite(lng)) return null;
+            return {
+              id,
+              lat,
+              lng,
+              done: false,
+              label: "📍",
+              address: p.address ? String(p.address) : "Точка на карті",
+              regionGroup: 0,
+              regionColor: "#a855f7",
+              isPinned: true
+            };
+          })
+          .filter(Boolean);
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function savePinnedStops() {
+      try {
+        const pins = stops.filter(s => s.isPinned).map(s => ({
+          id: s.id,
+          lat: s.lat,
+          lng: s.lng,
+          address: s.address
+        }));
+        localStorage.setItem(PIN_STORE_KEY, JSON.stringify(pins));
+      } catch (e) {}
+    }
+
+    // додаємо збережені pinned точки в stops
+    const pinnedLoaded = loadPinnedStops();
+    if (pinnedLoaded.length) {
+      stops = stops.concat(pinnedLoaded);
+    }
 
     let selectedStopId =
       (currentIdFromUrl && stops.find((s) => s.id === currentIdFromUrl)?.id) ||
@@ -345,6 +406,10 @@
       return stops.find((s) => s.id === id);
     }
 
+    function isPinnedId(id) {
+      return typeof id === "string" && id.startsWith("pinned_");
+    }
+
     function updateMarkerStyle(id) {
       const marker = markers.get(id);
       if (!marker) return;
@@ -353,9 +418,14 @@
 
       const isSelected = selectedStopId === id;
 
-      const bgColor = stop.done ? "#6b7280" : (stop.regionColor || "#ef4444");
+      const bgColor = stop.isPinned
+        ? "#a855f7"
+        : (stop.done ? "#6b7280" : (stop.regionColor || "#ef4444"));
+
       const borderColor = isSelected ? "#22c55e" : "#ffffff";
       const size = isSelected ? 28 : 22;
+
+      const text = stop.label ?? "";
 
       const iconHtml = `
         <div style="
@@ -368,11 +438,11 @@
           display:flex;
           align-items:center;
           justify-content:center;
-          font-size:12px;
+          font-size:${stop.isPinned ? 14 : 12}px;
           color:#fff;
-          font-weight:700;
+          font-weight:800;
         ">
-          ${stop.label}
+          ${text}
         </div>
       `;
 
@@ -390,26 +460,48 @@
     const btnUndo = document.getElementById("btn-undo");
     const btnGmaps = document.getElementById("btn-gmaps");
     const btnFollow = document.getElementById("btn-follow");
+    const btnDelPin = document.getElementById("btn-del-pin");
 
     let currentGmapsUrl = null;
+
+    function setPinnedDeleteUI(stop) {
+      if (stop && stop.isPinned) btnDelPin.style.display = "inline-block";
+      else btnDelPin.style.display = "none";
+    }
 
     function renderInfo() {
       const stop = getStopById(selectedStopId);
       if (!stop) {
         infoEl.innerHTML = "";
+        setPinnedDeleteUI(null);
         return;
       }
 
-      const statusText = stop.done ? "✅ Доставлено" : "❌ Ще не доставлено";
+      const statusText = stop.isPinned
+        ? "📌 Закріплена точка"
+        : (stop.done ? "✅ Доставлено" : "❌ Ще не доставлено");
 
-      infoEl.innerHTML = `
-        <div class="addr">${stop.address}</div>
-        <div class="status">${statusText}</div>
+      const coordsText = `(${stop.lat.toFixed(5)}, ${stop.lng.toFixed(5)})`;
+
+      const regionHtml = (!stop.isPinned && stop.regionGroup > 0) ? `
         <div class="region">
           <span class="dot" style="background:${stop.regionColor};"></span>
           <span>Район #${stop.regionGroup}</span>
         </div>
+      ` : `
+        <div class="region" style="opacity:0.9;">
+          <span class="dot" style="background:${stop.isPinned ? "#a855f7" : "#6b7280"};"></span>
+          <span>${coordsText}</span>
+        </div>
       `;
+
+      infoEl.innerHTML = `
+        <div class="addr">${stop.address}</div>
+        <div class="status">${statusText}</div>
+        ${regionHtml}
+      `;
+
+      setPinnedDeleteUI(stop);
     }
 
     function updateGmapsButton(stop) {
@@ -429,41 +521,135 @@
       btnGmaps.disabled = false;
     }
 
-    function selectStop(id) {
+    function selectStop(id, doPan = true) {
       selectedStopId = id;
       markers.forEach((_m, key) => updateMarkerStyle(key));
       const stop = getStopById(id);
-      if (stop) map.panTo([stop.lat, stop.lng]);
+      if (stop && doPan) map.panTo([stop.lat, stop.lng]);
       renderInfo();
       updateGmapsButton(stop);
     }
 
-    stops.forEach((stop) => {
+    function addStopMarker(stop) {
       const marker = L.marker([stop.lat, stop.lng]).addTo(map);
       markers.set(stop.id, marker);
 
       marker.on("click", () => {
         selectStop(stop.id);
 
-        const popupHtml =
-          `<b>${stop.address}</b><br>` +
-          `Зупинка: #${stop.label}<br>` +
-          `Район: #${stop.regionGroup}`;
+        const popupHtml = stop.isPinned
+          ? `<b>📍 Закріплена точка</b><br>${stop.address}`
+          : `<b>${stop.address}</b><br>Зупинка: #${stop.label}<br>Район: #${stop.regionGroup}`;
 
         marker.bindPopup(popupHtml, { autoClose: true }).openPopup();
       });
 
       updateMarkerStyle(stop.id);
-    });
+    }
+
+    // Рендер усіх маркерів
+    stops.forEach(addStopMarker);
 
     if (selectedStopId !== null) {
-      selectStop(selectedStopId);
+      selectStop(selectedStopId, false);
     } else {
       btnGmaps.disabled = true;
       currentGmapsUrl = null;
+      btnDelPin.style.display = "none";
     }
 
+    // ===============================
+    // ✅ LONG PRESS по карті -> PIN
+    // ===============================
+    (function enableLongPressPin(){
+      const container = map.getContainer();
+      let pressTimer = null;
+      let startX = 0, startY = 0;
+      let activePointerId = null;
+      let moved = false;
+
+      const HOLD_MS = 550;
+      const MOVE_PX = 12;
+
+      function clearPress() {
+        if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+        activePointerId = null;
+        moved = false;
+      }
+
+      function createPinnedAt(latlng) {
+        const id = "pinned_" + Date.now();
+        const stop = {
+          id,
+          lat: latlng.lat,
+          lng: latlng.lng,
+          done: false,
+          label: "📍",
+          address: "Точка на карті",
+          regionGroup: 0,
+          regionColor: "#a855f7",
+          isPinned: true
+        };
+
+        stops.push(stop);
+        addStopMarker(stop);
+        savePinnedStops();
+
+        selectStop(stop.id);
+      }
+
+      // якщо користувач почав рухати/зумити карту — скасовуємо long press
+      map.on("movestart zoomstart rotatestart dragstart", clearPress);
+
+      container.addEventListener("pointerdown", (e) => {
+        // тільки один палець/миша
+        if (activePointerId !== null) return;
+        activePointerId = e.pointerId;
+        startX = e.clientX;
+        startY = e.clientY;
+        moved = false;
+
+        pressTimer = setTimeout(() => {
+          pressTimer = null;
+          if (moved) return;
+
+          // якщо це було по маркеру/кнопках Leaflet — не ставимо точку
+          if (e.target && (e.target.closest(".leaflet-marker-pane") || e.target.closest(".leaflet-control"))) {
+            return;
+          }
+
+          const latlng = map.mouseEventToLatLng(e);
+          if (!latlng) return;
+
+          // маленька вібрація (якщо доступна)
+          try { if (navigator.vibrate) navigator.vibrate(25); } catch(_) {}
+
+          createPinnedAt(latlng);
+        }, HOLD_MS);
+      }, { passive: true });
+
+      container.addEventListener("pointermove", (e) => {
+        if (activePointerId !== e.pointerId) return;
+        const dx = Math.abs(e.clientX - startX);
+        const dy = Math.abs(e.clientY - startY);
+        if (dx > MOVE_PX || dy > MOVE_PX) {
+          moved = true;
+          clearPress();
+        }
+      }, { passive: true });
+
+      container.addEventListener("pointerup", (e) => {
+        if (activePointerId !== e.pointerId) return;
+        clearPress();
+      }, { passive: true });
+
+      container.addEventListener("pointercancel", clearPress, { passive: true });
+      container.addEventListener("pointerleave", clearPress, { passive: true });
+    })();
+
+    // ===============================
     // Геолокація
+    // ===============================
     let userMarker = null;
     let lastUserPos = null;
     let watchId = null;
@@ -496,11 +682,7 @@
     function enableFollow() {
       followEnabled = true;
       setFollowUI();
-
-      // при вмиканні — одразу підтягуємось до водія, але НЕ ламаємо зум/поворот
-      if (lastUserPos) {
-        map.panTo(lastUserPos, { animate: true });
-      }
+      if (lastUserPos) map.panTo(lastUserPos, { animate: true });
     }
 
     function disableFollow() {
@@ -508,15 +690,11 @@
       setFollowUI();
     }
 
-    // ✅ Тумблер
     btnFollow.addEventListener("click", () => {
       if (followEnabled) disableFollow();
       else enableFollow();
     });
 
-    // ✅ ВАЖЛИВО: НЕ вимикаємо follow при drag/zoom/rotate (як ти просив)
-
-    // ⬇️ watchPosition: позиція без авто-повороту
     if (navigator.geolocation) {
       if (watchId !== null) navigator.geolocation.clearWatch(watchId);
 
@@ -543,10 +721,7 @@
             lastUserPos = latlng;
           }
 
-          // ✅ Слідкування: лише центруємо, не змінюємо zoom і не крутимо карту
-          if (followEnabled && lastUserPos) {
-            map.panTo(lastUserPos, { animate: true });
-          }
+          if (followEnabled && lastUserPos) map.panTo(lastUserPos, { animate: true });
         },
         (err) => {
           console.log("Geo error", err);
@@ -559,11 +734,16 @@
       );
     }
 
+    // ===============================
     // Кнопки
+    // ===============================
     btnComplete.addEventListener("click", () => {
       if (selectedStopId == null) return;
       const stop = getStopById(selectedStopId);
       if (!stop) return;
+
+      // pinned точку не “виконуємо”
+      if (stop.isPinned) return;
 
       stop.done = true;
       updateMarkerStyle(stop.id);
@@ -587,6 +767,32 @@
     btnGmaps.addEventListener("click", () => {
       if (!currentGmapsUrl) return;
       window.open(currentGmapsUrl, "_blank");
+    });
+
+    btnDelPin.addEventListener("click", () => {
+      const stop = getStopById(selectedStopId);
+      if (!stop || !stop.isPinned) return;
+
+      // прибираємо маркер
+      const marker = markers.get(stop.id);
+      if (marker) {
+        try { map.removeLayer(marker); } catch(e) {}
+        markers.delete(stop.id);
+      }
+
+      // прибираємо зі списку
+      stops = stops.filter(s => s.id !== stop.id);
+
+      savePinnedStops();
+
+      // вибираємо щось інше
+      selectedStopId = stops[0] ? stops[0].id : null;
+      if (selectedStopId !== null) selectStop(selectedStopId, false);
+      else {
+        infoEl.innerHTML = "";
+        btnGmaps.disabled = true;
+        btnDelPin.style.display = "none";
+      }
     });
   }
 </script>
