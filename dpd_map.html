@@ -18,6 +18,10 @@
   <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
 
   <style>
+    :root {
+      --topbar-h: 64px; /* запас, реальну висоту виставимо JS-ом */
+    }
+
     html, body {
       margin: 0;
       padding: 0;
@@ -32,36 +36,20 @@
       touch-action: manipulation;
     }
 
-    #app {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-    }
-
-    #map {
-      flex: 1;
-      min-height: 200px;
-
-      /* ✅ ФІКС: пріоритет жестів у карти, а не в сторінки */
-      touch-action: none;
-    }
-
-    #controls {
+    #topbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 9999;
       padding: 8px;
-      background: rgba(0, 0, 0, 0.85);
-      display: flex;
-      gap: 8px;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 14px;
-      flex-wrap: wrap;
-      position: relative;
+      background: rgba(0, 0, 0, 0.92);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      box-sizing: border-box;
     }
 
-    /* ✅ Пошук */
+    /* ✅ Пошук (тепер зверху) */
     #search-wrap {
-      width: 100%;
-      flex-basis: 100%;
       display: flex;
       gap: 8px;
       align-items: center;
@@ -90,9 +78,9 @@
       cursor: pointer;
     }
 
+    /* Випадаючі результати під topbar */
     #search-results {
-      width: 100%;
-      flex-basis: 100%;
+      margin-top: 8px;
       display: none;
       background: rgba(0,0,0,0.92);
       border: 1px solid rgba(255,255,255,0.12);
@@ -114,6 +102,33 @@
       opacity: 0.8;
       font-size: 12px;
       padding: 10px;
+    }
+
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      padding-top: var(--topbar-h); /* ✅ карта стартує під верхнім пошуком */
+    }
+
+    #map {
+      flex: 1;
+      min-height: 200px;
+
+      /* ✅ ФІКС: пріоритет жестів у карти, а не в сторінки */
+      touch-action: none;
+    }
+
+    #controls {
+      padding: 8px;
+      background: rgba(0, 0, 0, 0.85);
+      display: flex;
+      gap: 8px;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 14px;
+      flex-wrap: wrap;
+      position: relative;
     }
 
     #controls button {
@@ -192,17 +207,21 @@
   </style>
 </head>
 <body>
+
+<!-- ✅ TOP SEARCH BAR (зверху) -->
+<div id="topbar">
+  <div id="search-wrap">
+    <input id="search-input" type="text" placeholder="Пошук адреси (напр: Hauptstraße 12, Warstein)" autocomplete="off">
+    <button id="btn-search">🔎</button>
+  </div>
+  <div id="search-results"></div>
+</div>
+
 <div id="app">
   <div id="map"></div>
+
+  <!-- ✅ НИЖНІ КНОПКИ ТІЛЬКИ ДЛЯ ДОСТАВКИ -->
   <div id="controls">
-
-    <!-- ✅ Пошук -->
-    <div id="search-wrap">
-      <input id="search-input" type="text" placeholder="Пошук адреси (напр: Hauptstraße 12, Warstein)" autocomplete="off">
-      <button id="btn-search">🔎</button>
-    </div>
-    <div id="search-results"></div>
-
     <button id="btn-undo">↩️ Повернути</button>
     <button id="btn-complete">✅ Виконано</button>
     <button id="btn-follow">🧭 Слідкувати</button>
@@ -223,6 +242,15 @@
     mapEl.innerHTML = "";
     mapEl.appendChild(el);
   }
+
+  // ✅ Автовиставлення висоти topbar, щоб карта не залізала під нього
+  function syncTopbarHeight(){
+    const topbar = document.getElementById("topbar");
+    if (!topbar) return;
+    const h = Math.max(56, topbar.offsetHeight || 64);
+    document.documentElement.style.setProperty("--topbar-h", h + "px");
+  }
+  window.addEventListener("resize", syncTopbarHeight);
 
   let tg = null;
   if (window.Telegram && window.Telegram.WebApp) {
@@ -371,7 +399,6 @@
       } catch (e) {}
     }
 
-    // додаємо збережені pinned точки в stops
     const pinnedLoaded = loadPinnedStops();
     if (pinnedLoaded.length) {
       stops = stops.concat(pinnedLoaded);
@@ -384,7 +411,6 @@
 
     const markers = new Map();
 
-    // ✅ Ротація увімкнена, але АВТОПОВОРОТ ми прибрали — тільки ручна
     const map = L.map("map", { rotate: true, bearing: 0 });
 
     if (stops.length > 0) {
@@ -400,7 +426,6 @@
       attribution: "&copy; OpenStreetMap contributors",
     }).addTo(map);
 
-    /* ✅ прибираємо Leaflet “prefix” (він і є посиланням на leafletjs.com) */
     try {
       if (map.attributionControl && map.attributionControl.setPrefix) {
         map.attributionControl.setPrefix("");
@@ -426,7 +451,6 @@
 
         container.addEventListener("pointerdown", (e) => {
           pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-
           if (pointers.size === 2) {
             const arr = Array.from(pointers.values());
             startAngle = angleBetween(arr[0], arr[1]);
@@ -438,7 +462,6 @@
         container.addEventListener("pointermove", (e) => {
           if (!pointers.has(e.pointerId)) return;
           pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-
           if (pointers.size !== 2) return;
 
           const arr = Array.from(pointers.values());
@@ -615,7 +638,6 @@
       updateMarkerStyle(stop.id);
     }
 
-    // Рендер усіх маркерів
     stops.forEach(addStopMarker);
 
     if (selectedStopId !== null) {
@@ -670,11 +692,9 @@
         createPinnedStop(latlng.lat, latlng.lng, "Точка на карті");
       }
 
-      // якщо користувач почав рухати/зумити карту — скасовуємо long press
       map.on("movestart zoomstart rotatestart dragstart", clearPress);
 
       container.addEventListener("pointerdown", (e) => {
-        // тільки один палець/миша
         if (activePointerId !== null) return;
         activePointerId = e.pointerId;
         startX = e.clientX;
@@ -685,7 +705,6 @@
           pressTimer = null;
           if (moved) return;
 
-          // якщо це було по маркеру/кнопках Leaflet — не ставимо точку
           if (e.target && (e.target.closest(".leaflet-marker-pane") || e.target.closest(".leaflet-control"))) {
             return;
           }
@@ -693,7 +712,6 @@
           const latlng = map.mouseEventToLatLng(e);
           if (!latlng) return;
 
-          // маленька вібрація (якщо доступна)
           try { if (navigator.vibrate) navigator.vibrate(25); } catch(_) {}
 
           createPinnedAt(latlng);
@@ -718,7 +736,6 @@
       container.addEventListener("pointercancel", clearPress, { passive: true });
       container.addEventListener("pointerleave", clearPress, { passive: true });
 
-      // робимо функцію доступною для пошуку
       window.__createPinnedStop = createPinnedStop;
     })();
 
@@ -727,11 +744,9 @@
     // ===============================
     const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
     const NOMINATIM_LIMIT = 6;
+    const CONTACT_EMAIL = ""; // опціонально
 
-    // (не обов’язково) — якщо хочеш: впиши email для великих обсягів
-    const CONTACT_EMAIL = ""; // наприклад: "you@example.com"
-
-    const searchCache = new Map();   // key -> results
+    const searchCache = new Map();
     let debounceTimer = null;
     let lastRequestAt = 0;
     let inFlight = false;
@@ -745,6 +760,7 @@
       if (!items || !items.length) {
         searchResults.style.display = "block";
         searchResults.innerHTML = `<div class="sr-muted">Нічого не знайдено</div>`;
+        syncTopbarHeight();
         return;
       }
       searchResults.style.display = "block";
@@ -765,7 +781,6 @@
           const lon = Number(r.lon);
           if (!isFinite(lat) || !isFinite(lon)) return;
 
-          // додаємо як pinned
           if (window.__createPinnedStop) {
             window.__createPinnedStop(lat, lon, r.display_name);
           } else {
@@ -773,29 +788,28 @@
           }
 
           searchInput.value = "";
+          syncTopbarHeight();
         });
       });
+
+      syncTopbarHeight();
     }
 
     function hideResults() {
       searchResults.style.display = "none";
       searchResults.innerHTML = "";
+      syncTopbarHeight();
     }
 
     async function nominatimSearch(query) {
       const q = normalizeQuery(query);
       if (!q) return [];
 
-      if (searchCache.has(q)) {
-        return searchCache.get(q);
-      }
+      if (searchCache.has(q)) return searchCache.get(q);
 
-      // rate limit: не частіше ніж раз на 1100мс
       const now = Date.now();
       const wait = Math.max(0, 1100 - (now - lastRequestAt));
-      if (wait > 0) {
-        await new Promise(res => setTimeout(res, wait));
-      }
+      if (wait > 0) await new Promise(res => setTimeout(res, wait));
       lastRequestAt = Date.now();
 
       const url = new URL(NOMINATIM_URL);
@@ -803,8 +817,6 @@
       url.searchParams.set("q", q);
       url.searchParams.set("limit", String(NOMINATIM_LIMIT));
       url.searchParams.set("addressdetails", "0");
-
-      // (опційно) email параметр — для великих обсягів
       if (CONTACT_EMAIL) url.searchParams.set("email", CONTACT_EMAIL);
 
       const resp = await fetch(url.toString(), {
@@ -815,9 +827,7 @@
         }
       });
 
-      if (!resp.ok) {
-        throw new Error("Nominatim HTTP " + resp.status);
-      }
+      if (!resp.ok) throw new Error("Nominatim HTTP " + resp.status);
 
       const data = await resp.json();
       const arr = Array.isArray(data) ? data : [];
@@ -834,16 +844,15 @@
 
       inFlight = true;
       try {
-        // якщо за час очікування pendingQuery змінився — беремо найсвіжіший
         const results = await nominatimSearch(pendingQuery);
         showResults(results);
       } catch (e) {
         searchResults.style.display = "block";
         searchResults.innerHTML = `<div class="sr-muted">Помилка пошуку (Nominatim). Спробуй ще раз.</div>`;
+        syncTopbarHeight();
       } finally {
         inFlight = false;
 
-        // якщо поки летів запит — користувач ввів новий текст
         const latest = normalizeQuery(searchInput.value);
         if (latest && latest !== pendingQuery) {
           runSearch(latest);
@@ -857,30 +866,22 @@
     }
 
     searchInput.addEventListener("input", scheduleSearch);
-
     btnSearch.addEventListener("click", () => runSearch(searchInput.value));
 
     searchInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        runSearch(searchInput.value);
-      }
-      if (e.key === "Escape") {
-        hideResults();
-        searchInput.blur();
-      }
+      if (e.key === "Enter") { e.preventDefault(); runSearch(searchInput.value); }
+      if (e.key === "Escape") { hideResults(); searchInput.blur(); }
     });
 
-    // клік поза результатами — сховати
     document.addEventListener("click", (e) => {
       const t = e.target;
       if (!t) return;
-      if (t.closest("#search-wrap") || t.closest("#search-results")) return;
+      if (t.closest("#topbar") || t.closest("#search-results")) return;
       hideResults();
     });
 
     // ===============================
-    // Геолокація
+    // Геолокація / FOLLOW
     // ===============================
     let userMarker = null;
     let lastUserPos = null;
@@ -901,9 +902,6 @@
       requestAnimationFrame(step);
     }
 
-    // ===============================
-    // ✅ FOLLOW ONLY (без авто-повороту)
-    // ===============================
     let followEnabled = false;
 
     function setFollowUI() {
@@ -955,45 +953,31 @@
 
           if (followEnabled && lastUserPos) map.panTo(lastUserPos, { animate: true });
         },
-        (err) => {
-          console.log("Geo error", err);
-        },
-        {
-          enableHighAccuracy: true,
-          maximumAge: 0,
-          timeout: 8000
-        }
+        (err) => { console.log("Geo error", err); },
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 8000 }
       );
     }
 
     // ===============================
-    // Кнопки
+    // Кнопки доставки
     // ===============================
     btnComplete.addEventListener("click", () => {
       if (selectedStopId == null) return;
       const stop = getStopById(selectedStopId);
       if (!stop) return;
-
-      // pinned точку не “виконуємо”
       if (stop.isPinned) return;
 
       stop.done = true;
       updateMarkerStyle(stop.id);
       renderInfo();
 
-      if (tg) {
-        tg.sendData(JSON.stringify({ action: "complete", stop_id: stop.id }));
-      } else {
-        console.log("Demo complete:", stop.id);
-      }
+      if (tg) tg.sendData(JSON.stringify({ action: "complete", stop_id: stop.id }));
+      else console.log("Demo complete:", stop.id);
     });
 
     btnUndo.addEventListener("click", () => {
-      if (tg) {
-        tg.sendData(JSON.stringify({ action: "undo" }));
-      } else {
-        console.log("Demo undo");
-      }
+      if (tg) tg.sendData(JSON.stringify({ action: "undo" }));
+      else console.log("Demo undo");
     });
 
     btnGmaps.addEventListener("click", () => {
@@ -1005,19 +989,15 @@
       const stop = getStopById(selectedStopId);
       if (!stop || !stop.isPinned) return;
 
-      // прибираємо маркер
       const marker = markers.get(stop.id);
       if (marker) {
         try { map.removeLayer(marker); } catch(e) {}
         markers.delete(stop.id);
       }
 
-      // прибираємо зі списку
       stops = stops.filter(s => s.id !== stop.id);
-
       savePinnedStops();
 
-      // вибираємо щось інше
       selectedStopId = stops[0] ? stops[0].id : null;
       if (selectedStopId !== null) selectStop(selectedStopId, false);
       else {
@@ -1026,6 +1006,11 @@
         btnDelPin.style.display = "none";
       }
     });
+
+    // ✅ В кінці: синхронізуємо висоту topbar (після того, як все відрендерилось)
+    syncTopbarHeight();
+    setTimeout(syncTopbarHeight, 50);
+    setTimeout(syncTopbarHeight, 250);
   }
 </script>
 </body>
