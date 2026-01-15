@@ -18,8 +18,9 @@
   <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
 
   <style>
-    :root {
-      --topbar-h: 64px; /* запас, реальну висоту виставимо JS-ом */
+    :root{
+      --topbar-h: 64px;
+      --bottombar-h: 160px;
     }
 
     html, body {
@@ -36,20 +37,44 @@
       touch-action: manipulation;
     }
 
-    #topbar {
+    #app {
+      position: relative;
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+    }
+
+    /* ✅ Карта займає весь екран МІЖ верхнім і нижнім баром */
+    #map {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: var(--topbar-h);
+      bottom: var(--bottombar-h);
+
+      /* ✅ ФІКС: пріоритет жестів у карти, а не в сторінки */
+      touch-action: none;
+      min-height: 200px;
+    }
+
+    /* =========================
+       ✅ TOPBAR (ПОШУК)
+       ========================= */
+    #topbar{
       position: fixed;
       top: 0;
       left: 0;
       right: 0;
       z-index: 9999;
-      padding: 8px;
+
+      padding: calc(8px + env(safe-area-inset-top)) 8px 8px;
       background: rgba(0, 0, 0, 0.92);
       border-bottom: 1px solid rgba(255,255,255,0.08);
       box-sizing: border-box;
     }
 
-    /* ✅ Пошук (тепер зверху) */
     #search-wrap {
+      width: 100%;
       display: flex;
       gap: 8px;
       align-items: center;
@@ -78,8 +103,8 @@
       cursor: pointer;
     }
 
-    /* Випадаючі результати під topbar */
     #search-results {
+      width: 100%;
       margin-top: 8px;
       display: none;
       background: rgba(0,0,0,0.92);
@@ -104,31 +129,62 @@
       padding: 10px;
     }
 
-    #app {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      padding-top: var(--topbar-h); /* ✅ карта стартує під верхнім пошуком */
-    }
-
-    #map {
-      flex: 1;
-      min-height: 200px;
-
-      /* ✅ ФІКС: пріоритет жестів у карти, а не в сторінки */
-      touch-action: none;
-    }
-
+    /* =========================
+       ✅ BOTTOMBAR (КНОПКИ + ІНФО)
+       ========================= */
     #controls {
-      padding: 8px;
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 9999;
+
+      padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
       background: rgba(0, 0, 0, 0.85);
+      box-sizing: border-box;
+
       display: flex;
       gap: 8px;
       justify-content: space-between;
       align-items: center;
       font-size: 14px;
       flex-wrap: wrap;
-      position: relative;
+    }
+
+    /* ✅ ВАЖЛИВО: ІНФО ТЕПЕР ЗВЕРХУ, щоб ніколи не зникала */
+    #info {
+      order: -1;
+      padding: 0 0 6px;
+      font-size: 12px;
+      opacity: 0.95;
+      width: 100%;
+      flex-basis: 100%;
+      line-height: 1.25;
+    }
+    #info .addr {
+      font-size: 13px;
+      font-weight: 800;
+      opacity: 1;
+    }
+    #info .status {
+      font-size: 12px;
+      opacity: 0.85;
+      margin-top: 2px;
+    }
+    #info .region {
+      margin-top: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      opacity: 0.95;
+    }
+    #info .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      border: 2px solid #fff;
+      box-sizing: border-box;
     }
 
     #controls button {
@@ -165,40 +221,6 @@
       display: none;
     }
 
-    #info {
-      padding: 6px 0 0;
-      font-size: 12px;
-      opacity: 0.9;
-      width: 100%;
-      flex-basis: 100%;
-      line-height: 1.25;
-    }
-    #info .addr {
-      font-size: 13px;
-      font-weight: 700;
-      opacity: 1;
-    }
-    #info .status {
-      font-size: 12px;
-      opacity: 0.85;
-      margin-top: 2px;
-    }
-    #info .region {
-      margin-top: 6px;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 12px;
-      opacity: 0.95;
-    }
-    #info .dot {
-      width: 12px;
-      height: 12px;
-      border-radius: 999px;
-      border: 2px solid #fff;
-      box-sizing: border-box;
-    }
-
     /* ✅ ГОЛОВНА ФІКСА: забороняємо кліки по атрибуції (щоб не відкривало leafletjs.com) */
     .leaflet-control-attribution,
     .leaflet-control-attribution a {
@@ -208,26 +230,26 @@
 </head>
 <body>
 
-<!-- ✅ TOP SEARCH BAR (зверху) -->
-<div id="topbar">
-  <div id="search-wrap">
-    <input id="search-input" type="text" placeholder="Пошук адреси (напр: Hauptstraße 12, Warstein)" autocomplete="off">
-    <button id="btn-search">🔎</button>
-  </div>
-  <div id="search-results"></div>
-</div>
-
 <div id="app">
+  <!-- ✅ TOPBAR SEARCH -->
+  <div id="topbar">
+    <div id="search-wrap">
+      <input id="search-input" type="text" placeholder="Пошук адреси (напр: Hauptstraße 12, Warstein)" autocomplete="off">
+      <button id="btn-search">🔎</button>
+    </div>
+    <div id="search-results"></div>
+  </div>
+
   <div id="map"></div>
 
-  <!-- ✅ НИЖНІ КНОПКИ ТІЛЬКИ ДЛЯ ДОСТАВКИ -->
+  <!-- ✅ BOTTOM CONTROLS -->
   <div id="controls">
+    <div id="info"></div>
     <button id="btn-undo">↩️ Повернути</button>
     <button id="btn-complete">✅ Виконано</button>
     <button id="btn-follow">🧭 Слідкувати</button>
     <button id="btn-gmaps" disabled>🚗 Маршрут у Google Maps</button>
     <button id="btn-del-pin">🗑️ Видалити точку</button>
-    <div id="info"></div>
   </div>
 </div>
 
@@ -243,14 +265,22 @@
     mapEl.appendChild(el);
   }
 
-  // ✅ Автовиставлення висоти topbar, щоб карта не залізала під нього
-  function syncTopbarHeight(){
+  // ✅ Автовимірюємо висоту верхнього/нижнього барів, щоб карта не “різалась”
+  function syncBarsHeight() {
     const topbar = document.getElementById("topbar");
-    if (!topbar) return;
-    const h = Math.max(56, topbar.offsetHeight || 64);
-    document.documentElement.style.setProperty("--topbar-h", h + "px");
+    const controls = document.getElementById("controls");
+
+    const topH = topbar ? Math.max(56, topbar.offsetHeight) : 0;
+    const bottomH = controls ? Math.max(120, controls.offsetHeight) : 0;
+
+    document.documentElement.style.setProperty("--topbar-h", topH + "px");
+    document.documentElement.style.setProperty("--bottombar-h", bottomH + "px");
+
+    // ✅ щоб Leaflet перерахував розміри
+    try {
+      if (window.__leafletMap) window.__leafletMap.invalidateSize();
+    } catch(e){}
   }
-  window.addEventListener("resize", syncTopbarHeight);
 
   let tg = null;
   if (window.Telegram && window.Telegram.WebApp) {
@@ -399,6 +429,7 @@
       } catch (e) {}
     }
 
+    // додаємо збережені pinned точки в stops
     const pinnedLoaded = loadPinnedStops();
     if (pinnedLoaded.length) {
       stops = stops.concat(pinnedLoaded);
@@ -411,7 +442,9 @@
 
     const markers = new Map();
 
+    // ✅ Ротація увімкнена, але АВТОПОВОРОТ ми прибрали — тільки ручна
     const map = L.map("map", { rotate: true, bearing: 0 });
+    window.__leafletMap = map;
 
     if (stops.length > 0) {
       const avgLat = stops.reduce((sum, s) => sum + s.lat, 0) / stops.length;
@@ -426,6 +459,7 @@
       attribution: "&copy; OpenStreetMap contributors",
     }).addTo(map);
 
+    /* ✅ прибираємо Leaflet “prefix” (він і є посиланням на leafletjs.com) */
     try {
       if (map.attributionControl && map.attributionControl.setPrefix) {
         map.attributionControl.setPrefix("");
@@ -451,6 +485,7 @@
 
         container.addEventListener("pointerdown", (e) => {
           pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
           if (pointers.size === 2) {
             const arr = Array.from(pointers.values());
             startAngle = angleBetween(arr[0], arr[1]);
@@ -462,6 +497,7 @@
         container.addEventListener("pointermove", (e) => {
           if (!pointers.has(e.pointerId)) return;
           pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
           if (pointers.size !== 2) return;
 
           const arr = Array.from(pointers.values());
@@ -558,6 +594,7 @@
     function setPinnedDeleteUI(stop) {
       if (stop && stop.isPinned) btnDelPin.style.display = "inline-block";
       else btnDelPin.style.display = "none";
+      syncBarsHeight();
     }
 
     function renderInfo() {
@@ -593,6 +630,7 @@
       `;
 
       setPinnedDeleteUI(stop);
+      syncBarsHeight();
     }
 
     function updateGmapsButton(stop) {
@@ -638,6 +676,7 @@
       updateMarkerStyle(stop.id);
     }
 
+    // Рендер усіх маркерів
     stops.forEach(addStopMarker);
 
     if (selectedStopId !== null) {
@@ -646,6 +685,7 @@
       btnGmaps.disabled = true;
       currentGmapsUrl = null;
       btnDelPin.style.display = "none";
+      syncBarsHeight();
     }
 
     // ===============================
@@ -686,6 +726,7 @@
         savePinnedStops();
         selectStop(stop.id);
         map.setView([lat, lng], Math.max(map.getZoom(), 16));
+        syncBarsHeight();
       }
 
       function createPinnedAt(latlng) {
@@ -744,7 +785,7 @@
     // ===============================
     const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
     const NOMINATIM_LIMIT = 6;
-    const CONTACT_EMAIL = ""; // опціонально
+    const CONTACT_EMAIL = ""; // опційно
 
     const searchCache = new Map();
     let debounceTimer = null;
@@ -760,7 +801,7 @@
       if (!items || !items.length) {
         searchResults.style.display = "block";
         searchResults.innerHTML = `<div class="sr-muted">Нічого не знайдено</div>`;
-        syncTopbarHeight();
+        syncBarsHeight();
         return;
       }
       searchResults.style.display = "block";
@@ -788,17 +829,17 @@
           }
 
           searchInput.value = "";
-          syncTopbarHeight();
+          syncBarsHeight();
         });
       });
 
-      syncTopbarHeight();
+      syncBarsHeight();
     }
 
     function hideResults() {
       searchResults.style.display = "none";
       searchResults.innerHTML = "";
-      syncTopbarHeight();
+      syncBarsHeight();
     }
 
     async function nominatimSearch(query) {
@@ -849,7 +890,7 @@
       } catch (e) {
         searchResults.style.display = "block";
         searchResults.innerHTML = `<div class="sr-muted">Помилка пошуку (Nominatim). Спробуй ще раз.</div>`;
-        syncTopbarHeight();
+        syncBarsHeight();
       } finally {
         inFlight = false;
 
@@ -869,8 +910,14 @@
     btnSearch.addEventListener("click", () => runSearch(searchInput.value));
 
     searchInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") { e.preventDefault(); runSearch(searchInput.value); }
-      if (e.key === "Escape") { hideResults(); searchInput.blur(); }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        runSearch(searchInput.value);
+      }
+      if (e.key === "Escape") {
+        hideResults();
+        searchInput.blur();
+      }
     });
 
     document.addEventListener("click", (e) => {
@@ -881,7 +928,7 @@
     });
 
     // ===============================
-    // Геолокація / FOLLOW
+    // Геолокація
     // ===============================
     let userMarker = null;
     let lastUserPos = null;
@@ -902,6 +949,9 @@
       requestAnimationFrame(step);
     }
 
+    // ===============================
+    // ✅ FOLLOW ONLY (без авто-повороту)
+    // ===============================
     let followEnabled = false;
 
     function setFollowUI() {
@@ -953,31 +1003,44 @@
 
           if (followEnabled && lastUserPos) map.panTo(lastUserPos, { animate: true });
         },
-        (err) => { console.log("Geo error", err); },
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 8000 }
+        (err) => {
+          console.log("Geo error", err);
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 8000
+        }
       );
     }
 
     // ===============================
-    // Кнопки доставки
+    // Кнопки
     // ===============================
     btnComplete.addEventListener("click", () => {
       if (selectedStopId == null) return;
       const stop = getStopById(selectedStopId);
       if (!stop) return;
+
       if (stop.isPinned) return;
 
       stop.done = true;
       updateMarkerStyle(stop.id);
       renderInfo();
 
-      if (tg) tg.sendData(JSON.stringify({ action: "complete", stop_id: stop.id }));
-      else console.log("Demo complete:", stop.id);
+      if (tg) {
+        tg.sendData(JSON.stringify({ action: "complete", stop_id: stop.id }));
+      } else {
+        console.log("Demo complete:", stop.id);
+      }
     });
 
     btnUndo.addEventListener("click", () => {
-      if (tg) tg.sendData(JSON.stringify({ action: "undo" }));
-      else console.log("Demo undo");
+      if (tg) {
+        tg.sendData(JSON.stringify({ action: "undo" }));
+      } else {
+        console.log("Demo undo");
+      }
     });
 
     btnGmaps.addEventListener("click", () => {
@@ -1005,12 +1068,15 @@
         btnGmaps.disabled = true;
         btnDelPin.style.display = "none";
       }
+
+      syncBarsHeight();
     });
 
-    // ✅ В кінці: синхронізуємо висоту topbar (після того, як все відрендерилось)
-    syncTopbarHeight();
-    setTimeout(syncTopbarHeight, 50);
-    setTimeout(syncTopbarHeight, 250);
+    // ✅ Після старту — синхронізуємо висоти
+    syncBarsHeight();
+    setTimeout(syncBarsHeight, 50);
+    setTimeout(syncBarsHeight, 250);
+    window.addEventListener("resize", syncBarsHeight);
   }
 </script>
 </body>
