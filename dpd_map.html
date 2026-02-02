@@ -5,17 +5,13 @@
   <meta charset="UTF-8" />
   <title>DPD Route Map</title>
 
-  <!-- ✅ ФІКС: блокуємо зум всієї сторінки (щоб не зникали кнопки), зум працює тільки в Leaflet -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 
-  <!-- Telegram WebApp SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
-  <!-- Leaflet локально з цього ж домену -->
   <link rel="stylesheet" href="leaflet.css" />
   <script src="leaflet.js"></script>
 
-  <!-- ✅ Плагін ротації Leaflet (залишаємо для ручного повороту) -->
   <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
 
   <style>
@@ -32,8 +28,6 @@
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: #111;
       color: #fff;
-
-      /* ✅ ФІКС: щоб при жестах/скролі не "їхала" сторінка */
       overflow: hidden;
       overscroll-behavior: none;
       touch-action: manipulation;
@@ -46,29 +40,22 @@
       overflow: hidden;
     }
 
-    /* ✅ Карта займає весь екран МІЖ верхнім і нижнім баром */
     #map {
       position: absolute;
       left: 0;
       right: 0;
       top: var(--topbar-h);
       bottom: var(--bottombar-h);
-
-      /* ✅ ФІКС: пріоритет жестів у карти, а не в сторінки */
       touch-action: none;
       min-height: 200px;
     }
 
-    /* =========================
-       ✅ TOPBAR (ПОШУК)
-       ========================= */
     #topbar {
       position: fixed;
       top: 0;
       left: 0;
       right: 0;
       z-index: 9999;
-
       padding: calc(8px + env(safe-area-inset-top)) 8px 8px;
       background: rgba(0, 0, 0, 0.92);
       border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -140,9 +127,6 @@
       padding: 10px;
     }
 
-    /* =========================
-       ✅ BOTTOMBAR (КНОПКИ + ІНФО)
-       ========================= */
     #controls {
       position: fixed;
       left: 0;
@@ -162,7 +146,6 @@
       flex-wrap: wrap;
     }
 
-    /* ✅ ВАЖЛИВО: ІНФО ТЕПЕР ЗВЕРХУ, щоб ніколи не зникала */
     #info {
       order: -1;
       padding: 0 0 6px;
@@ -232,7 +215,6 @@
       cursor: default;
     }
 
-    /* ✅ Кнопка "Слідкувати" */
     #btn-follow {
       background: #0b1220;
       color: #fff;
@@ -245,14 +227,20 @@
       border: none;
     }
 
-    /* ✅ Видалення pinned точки */
     #btn-del-pin {
       background: #ef4444;
       color: #fff;
       display: none;
     }
 
-    /* ✅ ГОЛОВНА ФІКСА: забороняємо кліки по атрибуції (щоб не відкривало leafletjs.com) */
+    /* ✅ НОВА КНОПКА "1️⃣ Перша" (BOTTOM BAR) */
+    #btn-first {
+      background: #22c55e;
+      color: #0b1220;
+      display: none;
+      font-weight: 900;
+    }
+
     .leaflet-control-attribution,
     .leaflet-control-attribution a {
       pointer-events: none !important;
@@ -265,13 +253,13 @@
     }
 
     .btn-first-stop {
-      padding: 4px 6px;
-      border-radius: 6px;
+      padding: 6px 10px;
+      border-radius: 8px;
       border: none;
       background: #22c55e;
       color: #0b1220;
       font-size: 14px;
-      font-weight: 800;
+      font-weight: 900;
       cursor: pointer;
     }
   </style>
@@ -280,7 +268,6 @@
 <body>
 
   <div id="app">
-    <!-- ✅ TOPBAR SEARCH -->
     <div id="topbar">
       <div id="search-wrap">
         <input id="search-input" type="text" placeholder="Пошук адреси (напр: Hauptstraße 12, Warstein)"
@@ -292,11 +279,11 @@
 
     <div id="map"></div>
 
-    <!-- ✅ BOTTOM CONTROLS -->
     <div id="controls">
       <div id="info"></div>
       <button id="btn-undo">↩️ Повернути</button>
       <button id="btn-complete">✅ Виконано</button>
+      <button id="btn-first">1️⃣ Перша</button>
       <button id="btn-follow">🧭 Слідкувати</button>
       <button id="btn-gmaps" disabled>🚗 Маршрут у Google Maps</button>
       <button id="btn-del-pin">🗑️ Видалити точку</button>
@@ -315,7 +302,6 @@
       mapEl.appendChild(el);
     }
 
-    // ✅ Автовимірюємо висоту верхнього/нижнього барів, щоб карта не “різалась”
     function syncBarsHeight() {
       const topbar = document.getElementById("topbar");
       const controls = document.getElementById("controls");
@@ -326,10 +312,7 @@
       document.documentElement.style.setProperty("--topbar-h", topH + "px");
       document.documentElement.style.setProperty("--bottombar-h", bottomH + "px");
 
-      // ✅ щоб Leaflet перерахував розміри
-      try {
-        if (window.__leafletMap) window.__leafletMap.invalidateSize();
-      } catch (e) { }
+      try { if (window.__leafletMap) window.__leafletMap.invalidateSize(); } catch (e) { }
     }
 
     let tg = null;
@@ -341,7 +324,6 @@
       console.log("Running outside Telegram WebApp – demo mode.");
     }
 
-    /* ✅ ДОДАТКОВИЙ ФІКС (особливо iOS): прибираємо системний pinch-zoom сторінки */
     (function blockPagePinchZoom() {
       try {
         document.addEventListener("gesturestart", function (e) { e.preventDefault(); }, { passive: false });
@@ -355,7 +337,6 @@
     } else {
       const params = new URLSearchParams(window.location.search);
 
-      // ✅ ГОЛОВНА ФІКСА: підтримка довгих URL через stops + stops2 + stops3...
       function collectStopsParam(p) {
         let combined = "";
         const first = p.get("stops");
@@ -432,9 +413,6 @@
         s.regionColor = REGION_COLORS[(regionGroup - 1) % REGION_COLORS.length];
       });
 
-      // =========================
-      // ✅ Pinned stops (long press)
-      // =========================
       const PIN_STORE_KEY = "dpd_pinned_stops_v1";
 
       function loadPinnedStops() {
@@ -479,7 +457,6 @@
         } catch (e) { }
       }
 
-      // додаємо збережені pinned точки в stops
       const pinnedLoaded = loadPinnedStops();
       if (pinnedLoaded.length) {
         stops = stops.concat(pinnedLoaded);
@@ -492,7 +469,6 @@
 
       const markers = new Map();
 
-      // ✅ Ротація увімкнена, але АВТОПОВОРОТ ми прибрали — тільки ручна
       const map = L.map("map", { rotate: true, bearing: 0 });
       window.__leafletMap = map;
 
@@ -509,14 +485,12 @@
         attribution: "&copy; OpenStreetMap contributors",
       }).addTo(map);
 
-      /* ✅ прибираємо Leaflet “prefix” (він і є посиланням на leafletjs.com) */
       try {
         if (map.attributionControl && map.attributionControl.setPrefix) {
           map.attributionControl.setPrefix("");
         }
       } catch (e) { }
 
-      // ✅ РУЧНИЙ поворот 2 пальцями (twist) — залишаємо
       (function enableMobileTwistRotate() {
         try {
           const container = map.getContainer();
@@ -633,8 +607,8 @@
       const btnGmaps = document.getElementById("btn-gmaps");
       const btnFollow = document.getElementById("btn-follow");
       const btnDelPin = document.getElementById("btn-del-pin");
+      const btnFirst = document.getElementById("btn-first");
 
-      // ✅ Пошук UI
       const searchInput = document.getElementById("search-input");
       const btnSearch = document.getElementById("btn-search");
       const searchResults = document.getElementById("search-results");
@@ -647,11 +621,22 @@
         syncBarsHeight();
       }
 
+      /* ✅ НОВЕ: показ/ховати кнопку "1️⃣ Перша" */
+      function setFirstButtonUI(stop) {
+        if (!stop || stop.isPinned) {
+          btnFirst.style.display = "none";
+        } else {
+          btnFirst.style.display = "inline-block";
+        }
+        syncBarsHeight();
+      }
+
       function renderInfo() {
         const stop = getStopById(selectedStopId);
         if (!stop) {
           infoEl.innerHTML = "";
           setPinnedDeleteUI(null);
+          setFirstButtonUI(null);
           return;
         }
 
@@ -680,6 +665,7 @@
       `;
 
         setPinnedDeleteUI(stop);
+        setFirstButtonUI(stop);
         syncBarsHeight();
       }
 
@@ -721,17 +707,18 @@
           if (stop.isPinned) {
             popupHtml = `<b>📍 Закріплена точка</b><br>${stop.address}`;
           } else {
+            /* ✅ ВАЖЛИВО: без inline onclick — робимо data-stop-id */
             popupHtml = `
-        <b>${stop.address}</b><br>
-        Зупинка: #${stop.label}<br>
-        Район: #${stop.regionGroup}
+              <b>${stop.address}</b><br>
+              Зупинка: #${stop.label}<br>
+              Район: #${stop.regionGroup}
 
-        <div class="popup-actions">
-          <button class="btn-first-stop" onclick="setFirstStop(${stop.id})">
-            1️⃣ перша
-          </button>
-        </div>
-      `;
+              <div class="popup-actions">
+                <button class="btn-first-stop" data-stop-id="${stop.id}">
+                  1️⃣ перша
+                </button>
+              </div>
+            `;
           }
 
           marker.bindPopup(popupHtml, { autoClose: true }).openPopup();
@@ -740,8 +727,6 @@
         updateMarkerStyle(stop.id);
       }
 
-
-      // Рендер усіх маркерів
       stops.forEach(addStopMarker);
 
       if (selectedStopId !== null) {
@@ -750,12 +735,34 @@
         btnGmaps.disabled = true;
         currentGmapsUrl = null;
         btnDelPin.style.display = "none";
+        btnFirst.style.display = "none";
         syncBarsHeight();
       }
 
-      // ===============================
-      // ✅ LONG PRESS по карті -> PIN
-      // ===============================
+      /* ✅ НОВЕ: надійний обробник кнопки в popup (мобільний фікс) */
+      map.on("popupopen", (e) => {
+        try {
+          const el = e.popup.getElement();
+          if (!el) return;
+
+          const btn = el.querySelector(".btn-first-stop");
+          if (!btn) return;
+
+          btn.addEventListener("click", (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+
+            const sid = btn.getAttribute("data-stop-id");
+            const stopId = Number(sid);
+            if (!isFinite(stopId)) return;
+
+            setFirstStop(stopId);
+          }, { passive: false });
+        } catch (err) {
+          console.log("popupopen handler error", err);
+        }
+      });
+
       (function enableLongPressPin() {
         const container = map.getContainer();
         let pressTimer = null;
@@ -845,12 +852,10 @@
         window.__createPinnedStop = createPinnedStop;
       })();
 
-      // ===============================
-      // ✅ Nominatim Search (debounce + cache + 1req/1.1s)
-      // ===============================
+      // Nominatim Search (твій код — без змін)
       const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
       const NOMINATIM_LIMIT = 6;
-      const CONTACT_EMAIL = ""; // опційно
+      const CONTACT_EMAIL = "";
 
       const searchCache = new Map();
       let debounceTimer = null;
@@ -992,9 +997,7 @@
         hideResults();
       });
 
-      // ===============================
-      // Геолокація
-      // ===============================
+      // Геолокація (твій код — без змін)
       let userMarker = null;
       let lastUserPos = null;
       let watchId = null;
@@ -1014,9 +1017,6 @@
         requestAnimationFrame(step);
       }
 
-      // ===============================
-      // ✅ FOLLOW ONLY (без авто-повороту)
-      // ===============================
       let followEnabled = false;
 
       function setFollowUI() {
@@ -1132,9 +1132,17 @@
           infoEl.innerHTML = "";
           btnGmaps.disabled = true;
           btnDelPin.style.display = "none";
+          btnFirst.style.display = "none";
         }
 
         syncBarsHeight();
+      });
+
+      /* ✅ НОВЕ: кнопка "1️⃣ Перша" знизу — завжди працює на телефоні */
+      btnFirst.addEventListener("click", () => {
+        const stop = getStopById(selectedStopId);
+        if (!stop || stop.isPinned) return;
+        setFirstStop(stop.id);
       });
 
       // ✅ Після старту — синхронізуємо висоти
@@ -1142,19 +1150,23 @@
       setTimeout(syncBarsHeight, 50);
       setTimeout(syncBarsHeight, 250);
       window.addEventListener("resize", syncBarsHeight);
-    }
 
-    function setFirstStop(stopId) {
-      if (!stopId) return;
+      // ====== Глобальна функція для Telegram sendData ======
+      function setFirstStop(stopId) {
+        if (!stopId) return;
 
-      if (tg) {
-        tg.sendData(JSON.stringify({
-          action: "set_first",
-          stop_id: stopId
-        }));
-      } else {
-        console.log("Demo set_first:", stopId);
+        if (tg) {
+          tg.sendData(JSON.stringify({
+            action: "set_first",
+            stop_id: stopId
+          }));
+        } else {
+          console.log("Demo set_first:", stopId);
+        }
       }
+
+      // робимо доступною для інших місць (якщо треба)
+      window.setFirstStop = setFirstStop;
     }
   </script>
 
