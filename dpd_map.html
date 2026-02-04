@@ -339,6 +339,10 @@
         try { return decodeURIComponent(s); } catch (e) { return s; }
       }
 
+      // ✅ НОВЕ: regionName підтримка
+      // Формат chunk:
+      //   legacy: id,lat,lng,done,label,address...
+      //   new:    id,lat,lng,done,label,regionName,address...
       if (stopsParam) {
         stops = stopsParam
           .split("|")
@@ -354,6 +358,7 @@
             if (isNaN(lat) || isNaN(lng) || isNaN(id)) return null;
 
             let label = index + 1;
+            let regionName = "";
             let address = `Зупинка #${index + 1}`;
 
             if (parts.length >= 5 && parts[4] !== "") {
@@ -361,21 +366,34 @@
               if (!isNaN(parsedLabel)) label = parsedLabel;
             }
 
-            if (parts.length >= 6) {
+            // Якщо є >=7 частин — вважаємо що parts[5] це regionName, а адреса починається з parts[6]
+            if (parts.length >= 7) {
+              const regionEnc = parts[5] || "";
+              const addrEnc = parts.slice(6).join(",");
+              regionName = regionEnc ? safeDecode(regionEnc) : "";
+              if (addrEnc !== "") address = safeDecode(addrEnc);
+            } else if (parts.length >= 6) {
+              // старий формат: адреса з parts[5...]
               const addrEnc = parts.slice(5).join(",");
               if (addrEnc !== "") address = safeDecode(addrEnc);
             }
 
-            return { id, lat, lng, done, label, address, regionGroup: 0, regionColor: "#ef4444", isPinned: false };
+            return {
+              id, lat, lng, done, label, address,
+              regionName,                 // ✅ додали
+              regionGroup: 0,
+              regionColor: "#ef4444",
+              isPinned: false
+            };
           })
           .filter(Boolean);
       }
 
       if (!stops.length) {
         stops = [
-          { id: 1, lat: 51.7005, lng: 8.7642, address: "Warburger Straße 3A, Paderborn", done: false, label: 1, regionGroup: 1, regionColor: "#ef4444", isPinned: false },
-          { id: 2, lat: 51.7020, lng: 8.7610, address: "Dahler Str. 2, Paderborn", done: false, label: 2, regionGroup: 1, regionColor: "#ef4444", isPinned: false },
-          { id: 3, lat: 51.7050, lng: 8.7600, address: "Sebastianstraße 7, Paderborn", done: false, label: 1, regionGroup: 2, regionColor: "#3b82f6", isPinned: false },
+          { id: 1, lat: 51.7005, lng: 8.7642, address: "Warburger Straße 3A, Paderborn", done: false, label: 1, regionName: "Kernstadt", regionGroup: 1, regionColor: "#ef4444", isPinned: false },
+          { id: 2, lat: 51.7020, lng: 8.7610, address: "Dahler Str. 2, Paderborn", done: false, label: 2, regionName: "Kernstadt", regionGroup: 1, regionColor: "#ef4444", isPinned: false },
+          { id: 3, lat: 51.7050, lng: 8.7600, address: "Sebastianstraße 7, Paderborn", done: false, label: 1, regionName: "Nord", regionGroup: 2, regionColor: "#3b82f6", isPinned: false },
         ];
       }
 
@@ -385,11 +403,21 @@
         "#84cc16", "#06b6d4", "#f43f5e", "#8b5cf6",
       ];
 
+      // ✅ НОВЕ: мапа назв районів
+      const regionNamesByGroup = new Map();
+
       let regionGroup = 1;
       stops.forEach((s, i) => {
         if (i > 0 && s.label === 1) regionGroup++;
         s.regionGroup = regionGroup;
         s.regionColor = REGION_COLORS[(regionGroup - 1) % REGION_COLORS.length];
+
+        // ✅ якщо бот передав назву — запам'ятовуємо для цього group
+        if (!s.isPinned && s.regionName && String(s.regionName).trim()) {
+          if (!regionNamesByGroup.has(regionGroup)) {
+            regionNamesByGroup.set(regionGroup, String(s.regionName).trim());
+          }
+        }
       });
 
       const PIN_STORE_KEY = "dpd_pinned_stops_v1";
@@ -413,6 +441,7 @@
                 done: false,
                 label: "📍",
                 address: p.address ? String(p.address) : "Точка на карті",
+                regionName: "",
                 regionGroup: 0,
                 regionColor: "#a855f7",
                 isPinned: true
@@ -596,6 +625,13 @@
         syncBarsHeight();
       }
 
+      function getRegionTitle(stop) {
+        if (!stop || stop.isPinned || stop.regionGroup <= 0) return "";
+        const name = regionNamesByGroup.get(stop.regionGroup);
+        if (name && String(name).trim()) return String(name).trim();
+        return `Район #${stop.regionGroup}`;
+      }
+
       function renderInfo() {
         const stop = getStopById(selectedStopId);
         if (!stop) {
@@ -610,10 +646,12 @@
 
         const coordsText = `(${stop.lat.toFixed(5)}, ${stop.lng.toFixed(5)})`;
 
+        const regionTitle = getRegionTitle(stop);
+
         const regionHtml = (!stop.isPinned && stop.regionGroup > 0) ? `
         <div class="region">
           <span class="dot" style="background:${stop.regionColor};"></span>
-          <span>Район #${stop.regionGroup}</span>
+          <span>${regionTitle}</span>
         </div>
       ` : `
         <div class="region" style="opacity:0.9;">
@@ -670,10 +708,11 @@
           if (stop.isPinned) {
             popupHtml = `<b>📍 Закріплена точка</b><br>${stop.address}`;
           } else {
+            const regionTitle = getRegionTitle(stop);
             popupHtml = `
               <b>${stop.address}</b><br>
               Зупинка: #${stop.label}<br>
-              Район: #${stop.regionGroup}`;
+              Район: ${regionTitle}`;
           }
 
           marker.bindPopup(popupHtml, { autoClose: true }).openPopup();
@@ -718,6 +757,7 @@
             done: false,
             label: "📍",
             address: addressText || "Точка на карті",
+            regionName: "",
             regionGroup: 0,
             regionColor: "#a855f7",
             isPinned: true
