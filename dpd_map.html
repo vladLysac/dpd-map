@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="uk">
-
 <head>
   <meta charset="UTF-8" />
   <title>DPD Route Map</title>
@@ -12,180 +11,104 @@
   <link rel="stylesheet" href="leaflet.css" />
   <script src="leaflet.js"></script>
 
+  <!-- ✅ ZLIB inflate/deflate for compressed stops -->
+  <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+
   <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
 
   <style>
-    :root {
-      --topbar-h: 64px;
-      --bottombar-h: 160px;
-    }
+    :root { --topbar-h: 64px; --bottombar-h: 160px; }
 
-    html,
-    body {
-      margin: 0;
-      padding: 0;
-      height: 100vh;
+    html, body {
+      margin: 0; padding: 0; height: 100vh;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #111;
-      color: #fff;
-      overflow: hidden;
-      overscroll-behavior: none;
-      touch-action: manipulation;
+      background: #111; color: #fff;
+      overflow: hidden; overscroll-behavior: none; touch-action: manipulation;
     }
 
-    #app {
-      position: relative;
-      height: 100vh;
-      width: 100vw;
-      overflow: hidden;
-    }
+    #app { position: relative; height: 100vh; width: 100vw; overflow: hidden; }
 
     #map {
-      position: absolute;
-      left: 0;
-      right: 0;
-      top: var(--topbar-h);
-      bottom: var(--bottombar-h);
-      touch-action: none;
-      min-height: 200px;
+      position: absolute; left: 0; right: 0;
+      top: var(--topbar-h); bottom: var(--bottombar-h);
+      touch-action: none; min-height: 200px;
     }
 
     #topbar {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      z-index: 9999;
+      position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
       padding: calc(8px + env(safe-area-inset-top)) 8px 8px;
-      background: rgba(0, 0, 0, 0.92);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(0,0,0,0.92);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
       box-sizing: border-box;
     }
 
-    #search-wrap {
-      width: 100%;
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
+    #search-wrap { width: 100%; display: flex; gap: 8px; align-items: center; }
 
     #search-input {
       flex: 1 1 auto;
       padding: 10px 10px;
       border-radius: 10px;
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      background: rgba(255, 255, 255, 0.06);
-      color: #fff;
-      outline: none;
-      font-size: 14px;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.06);
+      color: #fff; outline: none; font-size: 14px;
     }
+    #search-input::placeholder { color: rgba(255,255,255,0.6); }
 
-    #search-input::placeholder {
-      color: rgba(255, 255, 255, 0.6);
-    }
-
-    #btn-search {
+    #btn-search{
       flex: 0 0 auto;
       padding: 10px 12px;
       border-radius: 10px;
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      background: rgba(255, 255, 255, 0.10);
-      color: #fff;
-      font-weight: 800;
-      cursor: pointer;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.10);
+      color: #fff; font-weight: 800; cursor: pointer;
     }
 
     #search-results {
-      width: 100%;
-      margin-top: 8px;
-      display: none;
-      background: rgba(0, 0, 0, 0.92);
-      border: 1px solid rgba(255, 255, 255, 0.12);
+      width: 100%; margin-top: 8px; display: none;
+      background: rgba(0,0,0,0.92);
+      border: 1px solid rgba(255,255,255,0.12);
       border-radius: 12px;
       overflow: hidden;
     }
-
     .sr-item {
       padding: 10px 10px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      cursor: pointer;
-      font-size: 13px;
-      line-height: 1.25;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      cursor: pointer; font-size: 13px; line-height: 1.25;
     }
-
-    .sr-item:last-child {
-      border-bottom: none;
-    }
-
-    .sr-item:hover {
-      background: rgba(255, 255, 255, 0.06);
-    }
-
-    .sr-muted {
-      opacity: 0.8;
-      font-size: 12px;
-      padding: 10px;
-    }
+    .sr-item:last-child { border-bottom: none; }
+    .sr-item:hover { background: rgba(255,255,255,0.06); }
+    .sr-muted { opacity: 0.8; font-size: 12px; padding: 10px; }
 
     #controls {
-      position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      z-index: 9999;
-
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 9999;
       padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
-      background: rgba(0, 0, 0, 0.85);
+      background: rgba(0,0,0,0.85);
       box-sizing: border-box;
 
-      display: flex;
-      gap: 8px;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 14px;
-      flex-wrap: wrap;
+      display: flex; gap: 8px; justify-content: space-between; align-items: center;
+      font-size: 14px; flex-wrap: wrap;
     }
 
-    #info {
+    #info{
       order: -1;
       padding: 0 0 6px;
-      font-size: 12px;
-      opacity: 0.95;
-      width: 100%;
-      flex-basis: 100%;
+      font-size: 12px; opacity: 0.95;
+      width: 100%; flex-basis: 100%;
       line-height: 1.25;
     }
-
-    #info .addr {
-      font-size: 13px;
-      font-weight: 800;
-      opacity: 1;
-    }
-
-    #info .status {
-      font-size: 12px;
-      opacity: 0.85;
-      margin-top: 2px;
-    }
-
+    #info .addr { font-size: 13px; font-weight: 800; opacity: 1; }
+    #info .status { font-size: 12px; opacity: 0.85; margin-top: 2px; }
     #info .region {
       margin-top: 6px;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 12px;
-      opacity: 0.95;
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 12px; opacity: 0.95;
     }
-
     #info .dot {
-      width: 12px;
-      height: 12px;
-      border-radius: 999px;
-      border: 2px solid #fff;
-      box-sizing: border-box;
+      width: 12px; height: 12px; border-radius: 999px;
+      border: 2px solid #fff; box-sizing: border-box;
     }
 
-    #controls button {
+    #controls button{
       flex: 1 1 30%;
       padding: 8px;
       border-radius: 8px;
@@ -195,58 +118,36 @@
       cursor: pointer;
     }
 
-    #btn-complete {
-      background: #16a34a;
-      color: #fff;
-    }
+    #btn-complete { background: #16a34a; color: #fff; }
+    #btn-undo { background: #f97316; color: #111; }
+    #btn-gmaps { background: #2563eb; color: #fff; }
+    #btn-gmaps:disabled { opacity: 0.5; cursor: default; }
 
-    #btn-undo {
-      background: #f97316;
-      color: #111;
-    }
-
-    #btn-gmaps {
-      background: #2563eb;
-      color: #fff;
-    }
-
-    #btn-gmaps:disabled {
-      opacity: 0.5;
-      cursor: default;
-    }
-
-    #btn-follow {
+    #btn-follow{
       background: #0b1220;
       color: #fff;
-      border: 1px solid rgba(255, 255, 255, 0.15);
+      border: 1px solid rgba(255,255,255,0.15);
     }
-
-    #btn-follow.active {
+    #btn-follow.active{
       background: #22c55e;
       color: #0b1220;
       border: none;
     }
 
-    #btn-del-pin {
-      background: #ef4444;
-      color: #fff;
-      display: none;
-    }
+    #btn-del-pin { background: #ef4444; color: #fff; display: none; }
 
     .leaflet-control-attribution,
-    .leaflet-control-attribution a {
-      pointer-events: none !important;
-    }
+    .leaflet-control-attribution a { pointer-events: none !important; }
   </style>
 </head>
 
 <body>
-
   <div id="app">
     <div id="topbar">
       <div id="search-wrap">
-        <input id="search-input" type="text" placeholder="Пошук адреси (напр: Hauptstraße 12, Warstein)"
-          autocomplete="off">
+        <input id="search-input" type="text"
+               placeholder="Пошук адреси (напр: Hauptstraße 12, Warstein)"
+               autocomplete="off">
         <button id="btn-search">🔎</button>
       </div>
       <div id="search-results"></div>
@@ -286,7 +187,7 @@
       document.documentElement.style.setProperty("--topbar-h", topH + "px");
       document.documentElement.style.setProperty("--bottombar-h", bottomH + "px");
 
-      try { if (window.__leafletMap) window.__leafletMap.invalidateSize(); } catch (e) { }
+      try { if (window.__leafletMap) window.__leafletMap.invalidateSize(); } catch (e) {}
     }
 
     // ✅ Telegram WebApp init
@@ -300,20 +201,29 @@
 
     function sendToBot(payload) {
       if (!tg) return;
-      tg.sendData(JSON.stringify(payload));
+      try { tg.sendData(JSON.stringify(payload)); } catch (e) {}
     }
 
     (function blockPagePinchZoom() {
       try {
-        document.addEventListener("gesturestart", function (e) { e.preventDefault(); }, { passive: false });
-        document.addEventListener("gesturechange", function (e) { e.preventDefault(); }, { passive: false });
-        document.addEventListener("gestureend", function (e) { e.preventDefault(); }, { passive: false });
-      } catch (e) { }
+        document.addEventListener("gesturestart", (e) => e.preventDefault(), { passive: false });
+        document.addEventListener("gesturechange", (e) => e.preventDefault(), { passive: false });
+        document.addEventListener("gestureend", (e) => e.preventDefault(), { passive: false });
+      } catch (e) {}
     })();
 
     if (!window.L) {
       showError("Помилка: Leaflet не завантажився (об'єкт L відсутній).");
     } else {
+
+      // =========================
+      // ✅ URL decode (chunked) + supports:
+      // 1) legacy: stops= id,lat,lng,done,label,address | ...
+      // 2) compressed: stops= <base64url(zlib(json))>
+      // json format expected from Python:
+      // [{id,lat,lng,done,label,r,a}, ...]
+      // =========================
+
       const params = new URLSearchParams(window.location.search);
 
       function collectStopsParam(p) {
@@ -330,19 +240,49 @@
         return combined;
       }
 
-      const stopsParam = collectStopsParam(params);
-      const currentIdFromUrl = parseInt(params.get("current") || "0", 10);
-
-      let stops = [];
-
       function safeDecode(s) {
         try { return decodeURIComponent(s); } catch (e) { return s; }
       }
 
-      if (stopsParam) {
-        stops = stopsParam
-          .split("|")
-          .map((chunk, index) => {
+      function base64UrlToUint8Array(b64url) {
+        let s = String(b64url || "").replace(/-/g, "+").replace(/_/g, "/");
+        while (s.length % 4) s += "=";
+        const bin = atob(s);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        return bytes;
+      }
+
+      function decodeStopsCompressed(stopsParam) {
+        // heuristic: compressed param usually has NO '|' and no commas like "1,51.7,8.7,..."
+        // but safest is: try inflate, if fail -> return null
+        try {
+          if (!window.pako) return null;
+          const compressed = base64UrlToUint8Array(stopsParam);
+          const jsonText = new TextDecoder("utf-8").decode(window.pako.inflate(compressed));
+          const arr = JSON.parse(jsonText);
+          if (!Array.isArray(arr)) return null;
+
+          return arr.map((x) => ({
+            id: x.id,
+            lat: Number(x.lat),
+            lng: Number(x.lng),
+            done: x.done === 1 || x.done === true,
+            label: (x.label !== undefined && x.label !== null) ? x.label : 0,
+            address: (x.a && String(x.a).trim()) ? String(x.a) : "—",
+            regionName: (x.r && String(x.r).trim()) ? String(x.r) : "",
+            regionGroup: 0,
+            regionColor: "#ef4444",
+            isPinned: false
+          })).filter(s => Number.isFinite(s.lat) && Number.isFinite(s.lng));
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function decodeStopsLegacy(stopsParam) {
+        try {
+          return stopsParam.split("|").map((chunk, index) => {
             const parts = chunk.split(",");
             if (parts.length < 4) return null;
 
@@ -351,31 +291,57 @@
             const lng = parseFloat(parts[2]);
             const done = parts[3] === "1";
 
-            if (isNaN(lat) || isNaN(lng) || isNaN(id)) return null;
+            if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(id)) return null;
 
             let label = index + 1;
             let address = `Зупинка #${index + 1}`;
+            let regionName = "";
 
+            // legacy old: id,lat,lng,done,label,address...
+            // legacy newer: id,lat,lng,done,label,regionName,address...
             if (parts.length >= 5 && parts[4] !== "") {
               const parsedLabel = parseInt(parts[4], 10);
-              if (!isNaN(parsedLabel)) label = parsedLabel;
+              if (Number.isFinite(parsedLabel)) label = parsedLabel;
             }
 
-            if (parts.length >= 6) {
+            if (parts.length >= 7) {
+              const regionEnc = parts[5] || "";
+              const addrEnc = parts.slice(6).join(",");
+              regionName = regionEnc ? safeDecode(regionEnc) : "";
+              if (addrEnc !== "") address = safeDecode(addrEnc);
+            } else if (parts.length >= 6) {
               const addrEnc = parts.slice(5).join(",");
               if (addrEnc !== "") address = safeDecode(addrEnc);
             }
 
-            return { id, lat, lng, done, label, address, regionGroup: 0, regionColor: "#ef4444", isPinned: false };
-          })
-          .filter(Boolean);
+            return { id, lat, lng, done, label, address, regionName, regionGroup: 0, regionColor: "#ef4444", isPinned: false };
+          }).filter(Boolean);
+        } catch (e) {
+          return [];
+        }
       }
 
+      const stopsParam = collectStopsParam(params);
+      const currentIdFromUrl = parseInt(params.get("current") || "0", 10);
+
+      let stops = [];
+
+      if (stopsParam) {
+        const decodedCompressed = decodeStopsCompressed(stopsParam);
+        if (decodedCompressed && decodedCompressed.length) {
+          stops = decodedCompressed;
+        } else {
+          // fallback to legacy
+          stops = decodeStopsLegacy(stopsParam);
+        }
+      }
+
+      // fallback demo
       if (!stops.length) {
         stops = [
-          { id: 1, lat: 51.7005, lng: 8.7642, address: "Warburger Straße 3A, Paderborn", done: false, label: 1, regionGroup: 1, regionColor: "#ef4444", isPinned: false },
-          { id: 2, lat: 51.7020, lng: 8.7610, address: "Dahler Str. 2, Paderborn", done: false, label: 2, regionGroup: 1, regionColor: "#ef4444", isPinned: false },
-          { id: 3, lat: 51.7050, lng: 8.7600, address: "Sebastianstraße 7, Paderborn", done: false, label: 1, regionGroup: 2, regionColor: "#3b82f6", isPinned: false },
+          { id: 1, lat: 51.7005, lng: 8.7642, address: "Warburger Straße 3A, Paderborn", done: false, label: 1, regionName: "Kernstadt (33100)", regionGroup: 1, regionColor: "#ef4444", isPinned: false },
+          { id: 2, lat: 51.7020, lng: 8.7610, address: "Dahler Str. 2, Paderborn", done: false, label: 2, regionName: "Kernstadt (33100)", regionGroup: 1, regionColor: "#ef4444", isPinned: false },
+          { id: 3, lat: 51.7050, lng: 8.7600, address: "Sebastianstraße 7, Paderborn", done: false, label: 1, regionName: "Nord (33100)", regionGroup: 2, regionColor: "#3b82f6", isPinned: false },
         ];
       }
 
@@ -385,13 +351,23 @@
         "#84cc16", "#06b6d4", "#f43f5e", "#8b5cf6",
       ];
 
+      // ✅ region names for group
+      const regionNamesByGroup = new Map();
+
       let regionGroup = 1;
       stops.forEach((s, i) => {
         if (i > 0 && s.label === 1) regionGroup++;
         s.regionGroup = regionGroup;
         s.regionColor = REGION_COLORS[(regionGroup - 1) % REGION_COLORS.length];
+
+        if (!s.isPinned && s.regionName && String(s.regionName).trim()) {
+          if (!regionNamesByGroup.has(regionGroup)) {
+            regionNamesByGroup.set(regionGroup, String(s.regionName).trim());
+          }
+        }
       });
 
+      // pinned storage
       const PIN_STORE_KEY = "dpd_pinned_stops_v1";
 
       function loadPinnedStops() {
@@ -400,25 +376,24 @@
           if (!raw) return [];
           const arr = JSON.parse(raw);
           if (!Array.isArray(arr)) return [];
-          return arr
-            .map(p => {
-              const lat = Number(p.lat);
-              const lng = Number(p.lng);
-              const id = String(p.id || "");
-              if (!id || !isFinite(lat) || !isFinite(lng)) return null;
-              return {
-                id,
-                lat,
-                lng,
-                done: false,
-                label: "📍",
-                address: p.address ? String(p.address) : "Точка на карті",
-                regionGroup: 0,
-                regionColor: "#a855f7",
-                isPinned: true
-              };
-            })
-            .filter(Boolean);
+          return arr.map(p => {
+            const lat = Number(p.lat);
+            const lng = Number(p.lng);
+            const id = String(p.id || "");
+            if (!id || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+            return {
+              id,
+              lat,
+              lng,
+              done: false,
+              label: "📍",
+              address: p.address ? String(p.address) : "Точка на карті",
+              regionName: "",
+              regionGroup: 0,
+              regionColor: "#a855f7",
+              isPinned: true
+            };
+          }).filter(Boolean);
         } catch (e) {
           return [];
         }
@@ -433,11 +408,15 @@
             address: s.address
           }));
           localStorage.setItem(PIN_STORE_KEY, JSON.stringify(pins));
-        } catch (e) { }
+        } catch (e) {}
       }
 
       const pinnedLoaded = loadPinnedStops();
       if (pinnedLoaded.length) stops = stops.concat(pinnedLoaded);
+
+      // =========================
+      // Map init
+      // =========================
 
       let selectedStopId =
         (currentIdFromUrl && stops.find((s) => s.id === currentIdFromUrl)?.id) ||
@@ -466,7 +445,7 @@
         if (map.attributionControl && map.attributionControl.setPrefix) {
           map.attributionControl.setPrefix("");
         }
-      } catch (e) { }
+      } catch (e) {}
 
       (function enableMobileTwistRotate() {
         try {
@@ -486,7 +465,6 @@
 
           container.addEventListener("pointerdown", (e) => {
             pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-
             if (pointers.size === 2) {
               const arr = Array.from(pointers.values());
               startAngle = angleBetween(arr[0], arr[1]);
@@ -533,6 +511,13 @@
         return stops.find((s) => s.id === id);
       }
 
+      function getRegionTitle(stop) {
+        if (!stop || stop.isPinned || stop.regionGroup <= 0) return "";
+        const name = regionNamesByGroup.get(stop.regionGroup);
+        if (name && String(name).trim()) return String(name).trim();
+        return `Район #${stop.regionGroup}`;
+      }
+
       function updateMarkerStyle(id) {
         const marker = markers.get(id);
         if (!marker) return;
@@ -548,26 +533,26 @@
         const borderColor = isSelected ? "#22c55e" : "#ffffff";
         const size = isSelected ? 28 : 22;
 
-        const text = stop.label ?? "";
+        const text = (stop.label ?? "");
 
         const iconHtml = `
-        <div style="
-          width:${size}px;
-          height:${size}px;
-          border-radius:50%;
-          background:${bgColor};
-          border:2px solid ${borderColor};
-          box-shadow:0 0 8px rgba(0,0,0,0.7);
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          font-size:${stop.isPinned ? 14 : 12}px;
-          color:#fff;
-          font-weight:800;
-        ">
-          ${text}
-        </div>
-      `;
+          <div style="
+            width:${size}px;
+            height:${size}px;
+            border-radius:50%;
+            background:${bgColor};
+            border:2px solid ${borderColor};
+            box-shadow:0 0 8px rgba(0,0,0,0.7);
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            font-size:${stop.isPinned ? 14 : 12}px;
+            color:#fff;
+            font-weight:800;
+          ">
+            ${text}
+          </div>
+        `;
 
         const icon = L.divIcon({
           html: iconHtml,
@@ -591,8 +576,7 @@
       let currentGmapsUrl = null;
 
       function setPinnedDeleteUI(stop) {
-        if (stop && stop.isPinned) btnDelPin.style.display = "inline-block";
-        else btnDelPin.style.display = "none";
+        btnDelPin.style.display = (stop && stop.isPinned) ? "inline-block" : "none";
         syncBarsHeight();
       }
 
@@ -609,24 +593,25 @@
           : (stop.done ? "✅ Доставлено" : "❌ Ще не доставлено");
 
         const coordsText = `(${stop.lat.toFixed(5)}, ${stop.lng.toFixed(5)})`;
+        const regionTitle = getRegionTitle(stop);
 
         const regionHtml = (!stop.isPinned && stop.regionGroup > 0) ? `
-        <div class="region">
-          <span class="dot" style="background:${stop.regionColor};"></span>
-          <span>Район #${stop.regionGroup}</span>
-        </div>
-      ` : `
-        <div class="region" style="opacity:0.9;">
-          <span class="dot" style="background:${stop.isPinned ? "#a855f7" : "#6b7280"};"></span>
-          <span>${coordsText}</span>
-        </div>
-      `;
+          <div class="region">
+            <span class="dot" style="background:${stop.regionColor};"></span>
+            <span>${regionTitle}</span>
+          </div>
+        ` : `
+          <div class="region" style="opacity:0.9;">
+            <span class="dot" style="background:${stop.isPinned ? "#a855f7" : "#6b7280"};"></span>
+            <span>${coordsText}</span>
+          </div>
+        `;
 
         infoEl.innerHTML = `
-        <div class="addr">${stop.address}</div>
-        <div class="status">${statusText}</div>
-        ${regionHtml}
-      `;
+          <div class="addr">${stop.address}</div>
+          <div class="status">${statusText}</div>
+          ${regionHtml}
+        `;
 
         setPinnedDeleteUI(stop);
         syncBarsHeight();
@@ -640,12 +625,11 @@
         }
 
         const dest = `${stop.lat},${stop.lng}`;
-        const gmapsUrl =
+        currentGmapsUrl =
           "https://www.google.com/maps/dir/?api=1&destination=" +
           encodeURIComponent(dest) +
           "&travelmode=driving";
 
-        currentGmapsUrl = gmapsUrl;
         btnGmaps.disabled = false;
       }
 
@@ -666,14 +650,15 @@
           selectStop(stop.id);
 
           let popupHtml = "";
-
           if (stop.isPinned) {
             popupHtml = `<b>📍 Закріплена точка</b><br>${stop.address}`;
           } else {
+            const regionTitle = getRegionTitle(stop);
             popupHtml = `
               <b>${stop.address}</b><br>
               Зупинка: #${stop.label}<br>
-              Район: #${stop.regionGroup}`;
+              Район: ${regionTitle}
+            `;
           }
 
           marker.bindPopup(popupHtml, { autoClose: true }).openPopup();
@@ -693,6 +678,7 @@
         syncBarsHeight();
       }
 
+      // long press pin
       (function enableLongPressPin() {
         const container = map.getContainer();
         let pressTimer = null;
@@ -718,6 +704,7 @@
             done: false,
             label: "📍",
             address: addressText || "Точка на карті",
+            regionName: "",
             regionGroup: 0,
             regionColor: "#a855f7",
             isPinned: true
@@ -755,7 +742,7 @@
             const latlng = map.mouseEventToLatLng(e);
             if (!latlng) return;
 
-            try { if (navigator.vibrate) navigator.vibrate(25); } catch (_) { }
+            try { if (navigator.vibrate) navigator.vibrate(25); } catch (_) {}
 
             createPinnedAt(latlng);
           }, HOLD_MS);
@@ -806,21 +793,20 @@
         }
         searchResults.style.display = "block";
         searchResults.innerHTML = items.map((it, idx) => `
-        <div class="sr-item" data-idx="${idx}">
-          ${it.display_name}
-        </div>
-      `).join("");
+          <div class="sr-item" data-idx="${idx}">${it.display_name}</div>
+        `).join("");
 
         Array.from(searchResults.querySelectorAll(".sr-item")).forEach(el => {
           el.addEventListener("click", () => {
             const i = Number(el.getAttribute("data-idx"));
             const r = items[i];
             if (!r) return;
+
             searchResults.style.display = "none";
 
             const lat = Number(r.lat);
             const lon = Number(r.lon);
-            if (!isFinite(lat) || !isFinite(lon)) return;
+            if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
 
             if (window.__createPinnedStop) {
               window.__createPinnedStop(lat, lon, r.display_name);
@@ -910,14 +896,8 @@
       btnSearch.addEventListener("click", () => runSearch(searchInput.value));
 
       searchInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          runSearch(searchInput.value);
-        }
-        if (e.key === "Escape") {
-          hideResults();
-          searchInput.blur();
-        }
+        if (e.key === "Enter") { e.preventDefault(); runSearch(searchInput.value); }
+        if (e.key === "Escape") { hideResults(); searchInput.blur(); }
       });
 
       document.addEventListener("click", (e) => {
@@ -927,7 +907,7 @@
         hideResults();
       });
 
-      // Геолокація
+      // Geo + follow
       let userMarker = null;
       let lastUserPos = null;
       let watchId = null;
@@ -998,18 +978,12 @@
 
             if (followEnabled && lastUserPos) map.panTo(lastUserPos, { animate: true });
           },
-          (err) => {
-            console.log("Geo error", err);
-          },
-          {
-            enableHighAccuracy: true,
-            maximumAge: 0,
-            timeout: 8000
-          }
+          (err) => { console.log("Geo error", err); },
+          { enableHighAccuracy: true, maximumAge: 0, timeout: 8000 }
         );
       }
 
-      // Кнопки
+      // Buttons
       btnComplete.addEventListener("click", () => {
         if (selectedStopId == null) return;
         const stop = getStopById(selectedStopId);
@@ -1037,7 +1011,7 @@
 
         const marker = markers.get(stop.id);
         if (marker) {
-          try { map.removeLayer(marker); } catch (e) { }
+          try { map.removeLayer(marker); } catch (e) {}
           markers.delete(stop.id);
         }
 
@@ -1062,5 +1036,4 @@
     }
   </script>
 </body>
-
 </html>
