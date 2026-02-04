@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="uk">
+
 <head>
   <meta charset="UTF-8" />
   <title>DPD Route Map</title>
@@ -132,6 +133,7 @@
       right: 0;
       bottom: 0;
       z-index: 9999;
+
       padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
       background: rgba(0, 0, 0, 0.85);
       box-sizing: border-box;
@@ -193,11 +195,25 @@
       cursor: pointer;
     }
 
-    #btn-complete { background: #16a34a; color: #fff; }
-    #btn-undo { background: #f97316; color: #111; }
-    #btn-gmaps { background: #2563eb; color: #fff; }
+    #btn-complete {
+      background: #16a34a;
+      color: #fff;
+    }
 
-    #btn-gmaps:disabled { opacity: 0.5; cursor: default; }
+    #btn-undo {
+      background: #f97316;
+      color: #111;
+    }
+
+    #btn-gmaps {
+      background: #2563eb;
+      color: #fff;
+    }
+
+    #btn-gmaps:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
 
     #btn-follow {
       background: #0b1220;
@@ -225,12 +241,12 @@
 </head>
 
 <body>
+
   <div id="app">
     <div id="topbar">
       <div id="search-wrap">
-        <input id="search-input" type="text"
-               placeholder="Пошук адреси (напр: Hauptstraße 12, Warstein)"
-               autocomplete="off">
+        <input id="search-input" type="text" placeholder="Пошук адреси (напр: Hauptstraße 12, Warstein)"
+          autocomplete="off">
         <button id="btn-search">🔎</button>
       </div>
       <div id="search-results"></div>
@@ -270,10 +286,10 @@
       document.documentElement.style.setProperty("--topbar-h", topH + "px");
       document.documentElement.style.setProperty("--bottombar-h", bottomH + "px");
 
-      try { if (window.__leafletMap) window.__leafletMap.invalidateSize(); } catch (e) {}
+      try { if (window.__leafletMap) window.__leafletMap.invalidateSize(); } catch (e) { }
     }
 
-    // Telegram WebApp init
+    // ✅ Telegram WebApp init
     let tg = null;
     if (window.Telegram && window.Telegram.WebApp) {
       tg = window.Telegram.WebApp;
@@ -289,10 +305,10 @@
 
     (function blockPagePinchZoom() {
       try {
-        document.addEventListener("gesturestart", (e) => e.preventDefault(), { passive: false });
-        document.addEventListener("gesturechange", (e) => e.preventDefault(), { passive: false });
-        document.addEventListener("gestureend", (e) => e.preventDefault(), { passive: false });
-      } catch (e) {}
+        document.addEventListener("gesturestart", function (e) { e.preventDefault(); }, { passive: false });
+        document.addEventListener("gesturechange", function (e) { e.preventDefault(); }, { passive: false });
+        document.addEventListener("gestureend", function (e) { e.preventDefault(); }, { passive: false });
+      } catch (e) { }
     })();
 
     if (!window.L) {
@@ -323,58 +339,43 @@
         try { return decodeURIComponent(s); } catch (e) { return s; }
       }
 
-      // ✅ stopsParam формат:
-      // legacy: id,lat,lng,done,label,address...
-      // new:    id,lat,lng,done,label,regionName,address...
       if (stopsParam) {
-        stops = stopsParam.split("|").map((chunk, index) => {
-          const parts = chunk.split(",");
-          if (parts.length < 4) return null;
+        stops = stopsParam
+          .split("|")
+          .map((chunk, index) => {
+            const parts = chunk.split(",");
+            if (parts.length < 4) return null;
 
-          const id = parseInt(parts[0], 10);
-          const lat = parseFloat(parts[1]);
-          const lng = parseFloat(parts[2]);
-          const done = parts[3] === "1";
+            const id = parseInt(parts[0], 10);
+            const lat = parseFloat(parts[1]);
+            const lng = parseFloat(parts[2]);
+            const done = parts[3] === "1";
 
-          if (isNaN(lat) || isNaN(lng) || isNaN(id)) return null;
+            if (isNaN(lat) || isNaN(lng) || isNaN(id)) return null;
 
-          let label = index + 1;
-          let regionName = "";
-          let address = `Зупинка #${index + 1}`;
+            let label = index + 1;
+            let address = `Зупинка #${index + 1}`;
 
-          // label
-          if (parts.length >= 5 && parts[4] !== "") {
-            const parsedLabel = parseInt(parts[4], 10);
-            if (!isNaN(parsedLabel)) label = parsedLabel;
-          }
+            if (parts.length >= 5 && parts[4] !== "") {
+              const parsedLabel = parseInt(parts[4], 10);
+              if (!isNaN(parsedLabel)) label = parsedLabel;
+            }
 
-          // regionName + address
-          if (parts.length >= 7) {
-            const regionEnc = parts[5] || "";
-            const addrEnc = parts.slice(6).join(",");
-            regionName = regionEnc ? safeDecode(regionEnc) : "";
-            if (addrEnc !== "") address = safeDecode(addrEnc);
-          } else if (parts.length >= 6) {
-            const addrEnc = parts.slice(5).join(",");
-            if (addrEnc !== "") address = safeDecode(addrEnc);
-          }
+            if (parts.length >= 6) {
+              const addrEnc = parts.slice(5).join(",");
+              if (addrEnc !== "") address = safeDecode(addrEnc);
+            }
 
-          return {
-            id, lat, lng, done, label, address,
-            regionName,
-            regionGroup: 0,
-            regionColor: "#ef4444",
-            isPinned: false
-          };
-        }).filter(Boolean);
+            return { id, lat, lng, done, label, address, regionGroup: 0, regionColor: "#ef4444", isPinned: false };
+          })
+          .filter(Boolean);
       }
 
-      // fallback demo
       if (!stops.length) {
         stops = [
-          { id: 1, lat: 51.7005, lng: 8.7642, address: "Warburger Straße 3A, Paderborn", done: false, label: 1, regionName: "Kernstadt (33100)", regionGroup: 1, regionColor: "#ef4444", isPinned: false },
-          { id: 2, lat: 51.7020, lng: 8.7610, address: "Dahler Str. 2, Paderborn", done: false, label: 2, regionName: "Kernstadt (33100)", regionGroup: 1, regionColor: "#ef4444", isPinned: false },
-          { id: 3, lat: 51.7050, lng: 8.7600, address: "Sebastianstraße 7, Paderborn", done: false, label: 1, regionName: "Nord (33100)", regionGroup: 2, regionColor: "#3b82f6", isPinned: false },
+          { id: 1, lat: 51.7005, lng: 8.7642, address: "Warburger Straße 3A, Paderborn", done: false, label: 1, regionGroup: 1, regionColor: "#ef4444", isPinned: false },
+          { id: 2, lat: 51.7020, lng: 8.7610, address: "Dahler Str. 2, Paderborn", done: false, label: 2, regionGroup: 1, regionColor: "#ef4444", isPinned: false },
+          { id: 3, lat: 51.7050, lng: 8.7600, address: "Sebastianstraße 7, Paderborn", done: false, label: 1, regionGroup: 2, regionColor: "#3b82f6", isPinned: false },
         ];
       }
 
@@ -384,24 +385,13 @@
         "#84cc16", "#06b6d4", "#f43f5e", "#8b5cf6",
       ];
 
-      // ✅ NEW: зберігаємо назву району для кожного regionGroup
-      const regionNamesByGroup = new Map();
-
       let regionGroup = 1;
       stops.forEach((s, i) => {
         if (i > 0 && s.label === 1) regionGroup++;
         s.regionGroup = regionGroup;
         s.regionColor = REGION_COLORS[(regionGroup - 1) % REGION_COLORS.length];
-
-        // якщо bot передав regionName — закріплюємо для group
-        if (!s.isPinned && s.regionName && String(s.regionName).trim()) {
-          if (!regionNamesByGroup.has(regionGroup)) {
-            regionNamesByGroup.set(regionGroup, String(s.regionName).trim());
-          }
-        }
       });
 
-      // pinned storage
       const PIN_STORE_KEY = "dpd_pinned_stops_v1";
 
       function loadPinnedStops() {
@@ -410,24 +400,25 @@
           if (!raw) return [];
           const arr = JSON.parse(raw);
           if (!Array.isArray(arr)) return [];
-          return arr.map(p => {
-            const lat = Number(p.lat);
-            const lng = Number(p.lng);
-            const id = String(p.id || "");
-            if (!id || !isFinite(lat) || !isFinite(lng)) return null;
-            return {
-              id,
-              lat,
-              lng,
-              done: false,
-              label: "📍",
-              address: p.address ? String(p.address) : "Точка на карті",
-              regionName: "",
-              regionGroup: 0,
-              regionColor: "#a855f7",
-              isPinned: true
-            };
-          }).filter(Boolean);
+          return arr
+            .map(p => {
+              const lat = Number(p.lat);
+              const lng = Number(p.lng);
+              const id = String(p.id || "");
+              if (!id || !isFinite(lat) || !isFinite(lng)) return null;
+              return {
+                id,
+                lat,
+                lng,
+                done: false,
+                label: "📍",
+                address: p.address ? String(p.address) : "Точка на карті",
+                regionGroup: 0,
+                regionColor: "#a855f7",
+                isPinned: true
+              };
+            })
+            .filter(Boolean);
         } catch (e) {
           return [];
         }
@@ -442,7 +433,7 @@
             address: s.address
           }));
           localStorage.setItem(PIN_STORE_KEY, JSON.stringify(pins));
-        } catch (e) {}
+        } catch (e) { }
       }
 
       const pinnedLoaded = loadPinnedStops();
@@ -475,9 +466,8 @@
         if (map.attributionControl && map.attributionControl.setPrefix) {
           map.attributionControl.setPrefix("");
         }
-      } catch (e) {}
+      } catch (e) { }
 
-      // rotate with 2 fingers
       (function enableMobileTwistRotate() {
         try {
           const container = map.getContainer();
@@ -561,23 +551,23 @@
         const text = stop.label ?? "";
 
         const iconHtml = `
-          <div style="
-            width:${size}px;
-            height:${size}px;
-            border-radius:50%;
-            background:${bgColor};
-            border:2px solid ${borderColor};
-            box-shadow:0 0 8px rgba(0,0,0,0.7);
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            font-size:${stop.isPinned ? 14 : 12}px;
-            color:#fff;
-            font-weight:800;
-          ">
-            ${text}
-          </div>
-        `;
+        <div style="
+          width:${size}px;
+          height:${size}px;
+          border-radius:50%;
+          background:${bgColor};
+          border:2px solid ${borderColor};
+          box-shadow:0 0 8px rgba(0,0,0,0.7);
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          font-size:${stop.isPinned ? 14 : 12}px;
+          color:#fff;
+          font-weight:800;
+        ">
+          ${text}
+        </div>
+      `;
 
         const icon = L.divIcon({
           html: iconHtml,
@@ -601,16 +591,9 @@
       let currentGmapsUrl = null;
 
       function setPinnedDeleteUI(stop) {
-        btnDelPin.style.display = (stop && stop.isPinned) ? "inline-block" : "none";
+        if (stop && stop.isPinned) btnDelPin.style.display = "inline-block";
+        else btnDelPin.style.display = "none";
         syncBarsHeight();
-      }
-
-      // ✅ головна функція: "як назвати район для стопа"
-      function getRegionTitle(stop) {
-        if (!stop || stop.isPinned || stop.regionGroup <= 0) return "";
-        const name = regionNamesByGroup.get(stop.regionGroup);
-        if (name && String(name).trim()) return String(name).trim();
-        return `Район #${stop.regionGroup}`;
       }
 
       function renderInfo() {
@@ -626,25 +609,24 @@
           : (stop.done ? "✅ Доставлено" : "❌ Ще не доставлено");
 
         const coordsText = `(${stop.lat.toFixed(5)}, ${stop.lng.toFixed(5)})`;
-        const regionTitle = getRegionTitle(stop);
 
         const regionHtml = (!stop.isPinned && stop.regionGroup > 0) ? `
-          <div class="region">
-            <span class="dot" style="background:${stop.regionColor};"></span>
-            <span>${regionTitle}</span>
-          </div>
-        ` : `
-          <div class="region" style="opacity:0.9;">
-            <span class="dot" style="background:${stop.isPinned ? "#a855f7" : "#6b7280"};"></span>
-            <span>${coordsText}</span>
-          </div>
-        `;
+        <div class="region">
+          <span class="dot" style="background:${stop.regionColor};"></span>
+          <span>Район #${stop.regionGroup}</span>
+        </div>
+      ` : `
+        <div class="region" style="opacity:0.9;">
+          <span class="dot" style="background:${stop.isPinned ? "#a855f7" : "#6b7280"};"></span>
+          <span>${coordsText}</span>
+        </div>
+      `;
 
         infoEl.innerHTML = `
-          <div class="addr">${stop.address}</div>
-          <div class="status">${statusText}</div>
-          ${regionHtml}
-        `;
+        <div class="addr">${stop.address}</div>
+        <div class="status">${statusText}</div>
+        ${regionHtml}
+      `;
 
         setPinnedDeleteUI(stop);
         syncBarsHeight();
@@ -684,15 +666,14 @@
           selectStop(stop.id);
 
           let popupHtml = "";
+
           if (stop.isPinned) {
             popupHtml = `<b>📍 Закріплена точка</b><br>${stop.address}`;
           } else {
-            const regionTitle = getRegionTitle(stop);
             popupHtml = `
               <b>${stop.address}</b><br>
               Зупинка: #${stop.label}<br>
-              Район: ${regionTitle}
-            `;
+              Район: #${stop.regionGroup}`;
           }
 
           marker.bindPopup(popupHtml, { autoClose: true }).openPopup();
@@ -712,7 +693,6 @@
         syncBarsHeight();
       }
 
-      // long press pin
       (function enableLongPressPin() {
         const container = map.getContainer();
         let pressTimer = null;
@@ -738,7 +718,6 @@
             done: false,
             label: "📍",
             address: addressText || "Точка на карті",
-            regionName: "",
             regionGroup: 0,
             regionColor: "#a855f7",
             isPinned: true
@@ -776,7 +755,7 @@
             const latlng = map.mouseEventToLatLng(e);
             if (!latlng) return;
 
-            try { if (navigator.vibrate) navigator.vibrate(25); } catch (_) {}
+            try { if (navigator.vibrate) navigator.vibrate(25); } catch (_) { }
 
             createPinnedAt(latlng);
           }, HOLD_MS);
@@ -825,13 +804,12 @@
           syncBarsHeight();
           return;
         }
-
         searchResults.style.display = "block";
         searchResults.innerHTML = items.map((it, idx) => `
-          <div class="sr-item" data-idx="${idx}">
-            ${it.display_name}
-          </div>
-        `).join("");
+        <div class="sr-item" data-idx="${idx}">
+          ${it.display_name}
+        </div>
+      `).join("");
 
         Array.from(searchResults.querySelectorAll(".sr-item")).forEach(el => {
           el.addEventListener("click", () => {
@@ -1059,7 +1037,7 @@
 
         const marker = markers.get(stop.id);
         if (marker) {
-          try { map.removeLayer(marker); } catch (e) {}
+          try { map.removeLayer(marker); } catch (e) { }
           markers.delete(stop.id);
         }
 
@@ -1084,4 +1062,5 @@
     }
   </script>
 </body>
+
 </html>
