@@ -1,19 +1,19 @@
+<!-- #region App Dependencies -->
+
 <!DOCTYPE html>
 <html lang="uk">
-
 <head>
   <meta charset="UTF-8" />
   <title>DPD Route Map</title>
-
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-
   <link rel="stylesheet" href="leaflet.css" />
   <script src="leaflet.js"></script>
-
   <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
 
+<!--#endregion  -->
+
+<!-- #region App UI Layout & Theme -->
   <style>
     :root {
       --topbar-h: 64px;
@@ -240,8 +240,10 @@
   </style>
 </head>
 
-<body>
+<!-- #endregion -->
 
+<!-- #region UI Helpers -->
+<body>
   <div id="app">
     <div id="topbar">
       <div id="search-wrap">
@@ -251,7 +253,6 @@
       </div>
       <div id="search-results"></div>
     </div>
-
     <div id="map"></div>
 
     <div id="controls">
@@ -263,8 +264,11 @@
       <button id="btn-del-pin">🗑️ Видалити точку</button>
     </div>
   </div>
+<!-- endregion -->
 
   <script>
+
+    //#region UI Error Handling
     function showError(msg) {
       const el = document.createElement("div");
       el.style.padding = "16px";
@@ -275,21 +279,18 @@
       mapEl.innerHTML = "";
       mapEl.appendChild(el);
     }
+    // #endregion
 
+    // #region syncLayoutInsets()
     function syncBarsHeight() {
       const topbar = document.getElementById("topbar");
       const controls = document.getElementById("controls");
-
       const topH = topbar ? Math.max(56, topbar.offsetHeight) : 0;
       const bottomH = controls ? Math.max(120, controls.offsetHeight) : 0;
-
       document.documentElement.style.setProperty("--topbar-h", topH + "px");
       document.documentElement.style.setProperty("--bottombar-h", bottomH + "px");
-
       try { if (window.__leafletMap) window.__leafletMap.invalidateSize(); } catch (e) { }
     }
-
-    // ✅ Telegram WebApp init
     let tg = null;
     if (window.Telegram && window.Telegram.WebApp) {
       tg = window.Telegram.WebApp;
@@ -297,12 +298,16 @@
       tg.expand();
       tg.enableClosingConfirmation();
     }
+    // #endregion
 
+    //#region sendBridgeEvent()
     function sendToBot(payload) {
       if (!tg) return;
       tg.sendData(JSON.stringify(payload));
     }
+    // #endregion
 
+    // #region Map Bootstrap & Stops Data Initialization
     (function blockPagePinchZoom() {
       try {
         document.addEventListener("gesturestart", function (e) { e.preventDefault(); }, { passive: false });
@@ -310,17 +315,14 @@
         document.addEventListener("gestureend", function (e) { e.preventDefault(); }, { passive: false });
       } catch (e) { }
     })();
-
     if (!window.L) {
       showError("Помилка: Leaflet не завантажився (об'єкт L відсутній).");
     } else {
       const params = new URLSearchParams(window.location.search);
-
       function collectStopsParam(p) {
         let combined = "";
         const first = p.get("stops");
         if (first) combined += first;
-
         for (let i = 2; i <= 99; i++) {
           const key = "stops" + i;
           const part = p.get(key);
@@ -329,48 +331,37 @@
         }
         return combined;
       }
-
       const stopsParam = collectStopsParam(params);
       const currentIdFromUrl = parseInt(params.get("current") || "0", 10);
-
       let stops = [];
-
       function safeDecode(s) {
         try { return decodeURIComponent(s); } catch (e) { return s; }
       }
-
       if (stopsParam) {
         stops = stopsParam
           .split("|")
           .map((chunk, index) => {
             const parts = chunk.split(",");
             if (parts.length < 4) return null;
-
             const id = parseInt(parts[0], 10);
             const lat = parseFloat(parts[1]);
             const lng = parseFloat(parts[2]);
             const done = parts[3] === "1";
-
             if (isNaN(lat) || isNaN(lng) || isNaN(id)) return null;
-
             let label = index + 1;
             let address = `Зупинка #${index + 1}`;
-
             if (parts.length >= 5 && parts[4] !== "") {
               const parsedLabel = parseInt(parts[4], 10);
               if (!isNaN(parsedLabel)) label = parsedLabel;
             }
-
             if (parts.length >= 6) {
               const addrEnc = parts.slice(5).join(",");
               if (addrEnc !== "") address = safeDecode(addrEnc);
             }
-
             return { id, lat, lng, done, label, address, regionGroup: 0, regionColor: "#ef4444", isPinned: false };
           })
           .filter(Boolean);
       }
-
       if (!stops.length) {
         stops = [
           { id: 1, lat: 51.7005, lng: 8.7642, address: "Warburger Straße 3A, Paderborn", done: false, label: 1, regionGroup: 1, regionColor: "#ef4444", isPinned: false },
@@ -378,22 +369,18 @@
           { id: 3, lat: 51.7050, lng: 8.7600, address: "Sebastianstraße 7, Paderborn", done: false, label: 1, regionGroup: 2, regionColor: "#3b82f6", isPinned: false },
         ];
       }
-
       const REGION_COLORS = [
         "#ef4444", "#3b82f6", "#eab308", "#a855f7",
         "#22c55e", "#f97316", "#14b8a6", "#ec4899",
         "#84cc16", "#06b6d4", "#f43f5e", "#8b5cf6",
       ];
-
       let regionGroup = 1;
       stops.forEach((s, i) => {
         if (i > 0 && s.label === 1) regionGroup++;
         s.regionGroup = regionGroup;
         s.regionColor = REGION_COLORS[(regionGroup - 1) % REGION_COLORS.length];
       });
-
       const PIN_STORE_KEY = "dpd_pinned_stops_v1";
-
       function loadPinnedStops() {
         try {
           const raw = localStorage.getItem(PIN_STORE_KEY);
@@ -424,6 +411,10 @@
         }
       }
 
+// #endregion
+
+// #region Map Initialization & State Setup
+
       function savePinnedStops() {
         try {
           const pins = stops.filter(s => s.isPinned).map(s => ({
@@ -435,20 +426,15 @@
           localStorage.setItem(PIN_STORE_KEY, JSON.stringify(pins));
         } catch (e) { }
       }
-
       const pinnedLoaded = loadPinnedStops();
       if (pinnedLoaded.length) stops = stops.concat(pinnedLoaded);
-
       let selectedStopId =
         (currentIdFromUrl && stops.find((s) => s.id === currentIdFromUrl)?.id) ||
         (stops[0] && stops[0].id) ||
         null;
-
       const markers = new Map();
-
       const map = L.map("map", { rotate: true, bearing: 0 });
       window.__leafletMap = map;
-
       if (stops.length > 0) {
         const avgLat = stops.reduce((sum, s) => sum + s.lat, 0) / stops.length;
         const avgLng = stops.reduce((sum, s) => sum + s.lng, 0) / stops.length;
@@ -456,37 +442,29 @@
       } else {
         map.setView([51.7191, 8.7544], 12);
       }
-
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
         attribution: "&copy; OpenStreetMap contributors",
       }).addTo(map);
-
       try {
         if (map.attributionControl && map.attributionControl.setPrefix) {
           map.attributionControl.setPrefix("");
         }
       } catch (e) { }
-
       (function enableMobileTwistRotate() {
         try {
           const container = map.getContainer();
           if (!container || !map.setBearing || !map.getBearing) return;
-
           container.style.touchAction = "manipulation";
-
           const pointers = new Map();
           let rotating = false;
           let startAngle = 0;
           let startBearing = 0;
-
           function angleBetween(p1, p2) { return Math.atan2(p2.y - p1.y, p2.x - p1.x); }
           function radToDeg(r) { return r * 180 / Math.PI; }
           function normalizeDeg(d) { d = d % 360; if (d < 0) d += 360; return d; }
-
           container.addEventListener("pointerdown", (e) => {
             pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-
             if (pointers.size === 2) {
               const arr = Array.from(pointers.values());
               startAngle = angleBetween(arr[0], arr[1]);
@@ -494,32 +472,30 @@
               rotating = false;
             }
           }, { passive: true });
-
           container.addEventListener("pointermove", (e) => {
             if (!pointers.has(e.pointerId)) return;
             pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-
             if (pointers.size !== 2) return;
-
             const arr = Array.from(pointers.values());
             const a = angleBetween(arr[0], arr[1]);
             const deltaDeg = radToDeg(a - startAngle);
-
             if (!rotating) {
               if (Math.abs(deltaDeg) < 6) return;
               rotating = true;
             }
-
             e.preventDefault();
             const newBearing = normalizeDeg(startBearing + deltaDeg);
             map.setBearing(newBearing);
           }, { passive: false });
 
+// #endregion
+
+// #region Map Gesture Controls
+
           function endPointer(e) {
             if (pointers.has(e.pointerId)) pointers.delete(e.pointerId);
             if (pointers.size < 2) rotating = false;
           }
-
           container.addEventListener("pointerup", endPointer, { passive: true });
           container.addEventListener("pointercancel", endPointer, { passive: true });
           container.addEventListener("pointerout", endPointer, { passive: true });
@@ -529,27 +505,25 @@
         }
       })();
 
+// #endregion
+
+// #region Marker Styling & UI References
+
       function getStopById(id) {
         return stops.find((s) => s.id === id);
       }
-
       function updateMarkerStyle(id) {
         const marker = markers.get(id);
         if (!marker) return;
         const stop = getStopById(id);
         if (!stop) return;
-
         const isSelected = selectedStopId === id;
-
         const bgColor = stop.isPinned
           ? "#a855f7"
           : (stop.done ? "#6b7280" : (stop.regionColor || "#ef4444"));
-
         const borderColor = isSelected ? "#22c55e" : "#ffffff";
         const size = isSelected ? 28 : 22;
-
         const text = stop.label ?? "";
-
         const iconHtml = `
         <div style="
           width:${size}px;
@@ -568,7 +542,6 @@
           ${text}
         </div>
       `;
-
         const icon = L.divIcon({
           html: iconHtml,
           className: "custom-marker",
@@ -577,7 +550,6 @@
         });
         marker.setIcon(icon);
       }
-
       const infoEl = document.getElementById("info");
       const btnComplete = document.getElementById("btn-complete");
       const btnUndo = document.getElementById("btn-undo");
@@ -587,8 +559,11 @@
       const searchInput = document.getElementById("search-input");
       const btnSearch = document.getElementById("btn-search");
       const searchResults = document.getElementById("search-results");
-
       let currentGmapsUrl = null;
+
+// #endregion
+
+// #region Stop Interaction & Controls
 
       function setPinnedDeleteUI(stop) {
         if (stop && stop.isPinned) btnDelPin.style.display = "inline-block";
@@ -603,13 +578,10 @@
           setPinnedDeleteUI(null);
           return;
         }
-
         const statusText = stop.isPinned
           ? "📌 Закріплена точка"
           : (stop.done ? "✅ Доставлено" : "❌ Ще не доставлено");
-
         const coordsText = `(${stop.lat.toFixed(5)}, ${stop.lng.toFixed(5)})`;
-
         const regionHtml = (!stop.isPinned && stop.regionGroup > 0) ? `
         <div class="region">
           <span class="dot" style="background:${stop.regionColor};"></span>
@@ -621,16 +593,15 @@
           <span>${coordsText}</span>
         </div>
       `;
-
         infoEl.innerHTML = `
         <div class="addr">${stop.address}</div>
         <div class="status">${statusText}</div>
         ${regionHtml}
       `;
-
         setPinnedDeleteUI(stop);
         syncBarsHeight();
       }
+
 
       function updateGmapsButton(stop) {
         if (!stop) {
@@ -638,16 +609,15 @@
           btnGmaps.disabled = true;
           return;
         }
-
         const dest = `${stop.lat},${stop.lng}`;
         const gmapsUrl =
           "https://www.google.com/maps/dir/?api=1&destination=" +
           encodeURIComponent(dest) +
           "&travelmode=driving";
-
         currentGmapsUrl = gmapsUrl;
         btnGmaps.disabled = false;
       }
+
 
       function selectStop(id, doPan = true) {
         selectedStopId = id;
@@ -658,15 +628,13 @@
         updateGmapsButton(stop);
       }
 
+
       function addStopMarker(stop) {
         const marker = L.marker([stop.lat, stop.lng]).addTo(map);
         markers.set(stop.id, marker);
-
         marker.on("click", () => {
           selectStop(stop.id);
-
           let popupHtml = "";
-
           if (stop.isPinned) {
             popupHtml = `<b>📍 Закріплена точка</b><br>${stop.address}`;
           } else {
@@ -675,15 +643,11 @@
               Зупинка: #${stop.label}<br>
               Район: #${stop.regionGroup}`;
           }
-
           marker.bindPopup(popupHtml, { autoClose: true }).openPopup();
         });
-
         updateMarkerStyle(stop.id);
       }
-
       stops.forEach(addStopMarker);
-
       if (selectedStopId !== null) {
         selectStop(selectedStopId, false);
       } else {
@@ -693,21 +657,25 @@
         syncBarsHeight();
       }
 
+
       (function enableLongPressPin() {
         const container = map.getContainer();
         let pressTimer = null;
         let startX = 0, startY = 0;
         let activePointerId = null;
         let moved = false;
-
         const HOLD_MS = 550;
         const MOVE_PX = 12;
+
 
         function clearPress() {
           if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
           activePointerId = null;
           moved = false;
         }
+// #endregion
+
+// #region Pinned Stop Creation & Long Press
 
         function createPinnedStop(lat, lng, addressText) {
           const id = "pinned_" + Date.now();
@@ -722,7 +690,6 @@
             regionColor: "#a855f7",
             isPinned: true
           };
-
           stops.push(stop);
           addStopMarker(stop);
           savePinnedStops();
@@ -731,36 +698,29 @@
           syncBarsHeight();
         }
 
+
         function createPinnedAt(latlng) {
           createPinnedStop(latlng.lat, latlng.lng, "Точка на карті");
         }
-
         map.on("movestart zoomstart rotatestart dragstart", clearPress);
-
         container.addEventListener("pointerdown", (e) => {
           if (activePointerId !== null) return;
           activePointerId = e.pointerId;
           startX = e.clientX;
           startY = e.clientY;
           moved = false;
-
           pressTimer = setTimeout(() => {
             pressTimer = null;
             if (moved) return;
-
             if (e.target && (e.target.closest(".leaflet-marker-pane") || e.target.closest(".leaflet-control"))) {
               return;
             }
-
             const latlng = map.mouseEventToLatLng(e);
             if (!latlng) return;
-
             try { if (navigator.vibrate) navigator.vibrate(25); } catch (_) { }
-
             createPinnedAt(latlng);
           }, HOLD_MS);
         }, { passive: true });
-
         container.addEventListener("pointermove", (e) => {
           if (activePointerId !== e.pointerId) return;
           const dx = Math.abs(e.clientX - startX);
@@ -770,32 +730,31 @@
             clearPress();
           }
         }, { passive: true });
-
         container.addEventListener("pointerup", (e) => {
           if (activePointerId !== e.pointerId) return;
           clearPress();
         }, { passive: true });
-
         container.addEventListener("pointercancel", clearPress, { passive: true });
         container.addEventListener("pointerleave", clearPress, { passive: true });
-
         window.__createPinnedStop = createPinnedStop;
       })();
 
-      // Nominatim Search
+// #endregion 
+
+// #region Address Search & Geolocation
+
       const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
       const NOMINATIM_LIMIT = 6;
       const CONTACT_EMAIL = "";
-
       const searchCache = new Map();
       let debounceTimer = null;
       let lastRequestAt = 0;
       let inFlight = false;
       let pendingQuery = "";
-
       function normalizeQuery(q) {
         return String(q || "").trim().replace(/\s+/g, " ");
       }
+
 
       function showResults(items) {
         if (!items || !items.length) {
@@ -810,56 +769,47 @@
           ${it.display_name}
         </div>
       `).join("");
-
         Array.from(searchResults.querySelectorAll(".sr-item")).forEach(el => {
           el.addEventListener("click", () => {
             const i = Number(el.getAttribute("data-idx"));
             const r = items[i];
             if (!r) return;
             searchResults.style.display = "none";
-
             const lat = Number(r.lat);
             const lon = Number(r.lon);
             if (!isFinite(lat) || !isFinite(lon)) return;
-
             if (window.__createPinnedStop) {
               window.__createPinnedStop(lat, lon, r.display_name);
             } else {
               map.setView([lat, lon], 16);
             }
-
             searchInput.value = "";
             syncBarsHeight();
           });
         });
-
         syncBarsHeight();
       }
+
 
       function hideResults() {
         searchResults.style.display = "none";
         searchResults.innerHTML = "";
         syncBarsHeight();
       }
-
       async function nominatimSearch(query) {
         const q = normalizeQuery(query);
         if (!q) return [];
-
         if (searchCache.has(q)) return searchCache.get(q);
-
         const now = Date.now();
         const wait = Math.max(0, 1100 - (now - lastRequestAt));
         if (wait > 0) await new Promise(res => setTimeout(res, wait));
         lastRequestAt = Date.now();
-
         const url = new URL(NOMINATIM_URL);
         url.searchParams.set("format", "json");
         url.searchParams.set("q", q);
         url.searchParams.set("limit", String(NOMINATIM_LIMIT));
         url.searchParams.set("addressdetails", "0");
         if (CONTACT_EMAIL) url.searchParams.set("email", CONTACT_EMAIL);
-
         const resp = await fetch(url.toString(), {
           method: "GET",
           headers: {
@@ -867,22 +817,19 @@
             "Accept-Language": "uk,en;q=0.8,de;q=0.6"
           }
         });
-
         if (!resp.ok) throw new Error("Nominatim HTTP " + resp.status);
-
         const data = await resp.json();
         const arr = Array.isArray(data) ? data : [];
         searchCache.set(q, arr);
         return arr;
       }
 
+
       async function runSearch(query) {
         const q = normalizeQuery(query);
         if (!q) { hideResults(); return; }
-
         pendingQuery = q;
         if (inFlight) return;
-
         inFlight = true;
         try {
           const results = await nominatimSearch(pendingQuery);
@@ -893,7 +840,6 @@
           syncBarsHeight();
         } finally {
           inFlight = false;
-
           const latest = normalizeQuery(searchInput.value);
           if (latest && latest !== pendingQuery) {
             runSearch(latest);
@@ -905,10 +851,8 @@
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => runSearch(searchInput.value), 500);
       }
-
       searchInput.addEventListener("input", scheduleSearch);
       btnSearch.addEventListener("click", () => runSearch(searchInput.value));
-
       searchInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
           e.preventDefault();
@@ -919,15 +863,12 @@
           searchInput.blur();
         }
       });
-
       document.addEventListener("click", (e) => {
         const t = e.target;
         if (!t) return;
         if (t.closest("#topbar") || t.closest("#search-results")) return;
         hideResults();
       });
-
-      // Геолокація
       let userMarker = null;
       let lastUserPos = null;
       let watchId = null;
@@ -946,6 +887,9 @@
         }
         requestAnimationFrame(step);
       }
+// #endregion
+
+// #region Follow Mode (GPS Tracking)
 
       let followEnabled = false;
 
@@ -969,17 +913,13 @@
         if (followEnabled) disableFollow();
         else enableFollow();
       });
-
       if (navigator.geolocation) {
         if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-
         watchId = navigator.geolocation.watchPosition(
           (pos) => {
             const { latitude, longitude, accuracy } = pos.coords;
             const latlng = [latitude, longitude];
-
             if (userMarker && accuracy && accuracy > 120) return;
-
             if (!userMarker) {
               userMarker = L.circleMarker(latlng, {
                 radius: 8,
@@ -1009,7 +949,9 @@
         );
       }
 
-      // Кнопки
+// #endregion
+
+      // #region Action Buttons Handlers
       btnComplete.addEventListener("click", () => {
         if (selectedStopId == null) return;
         const stop = getStopById(selectedStopId);
@@ -1060,7 +1002,11 @@
       setTimeout(syncBarsHeight, 250);
       window.addEventListener("resize", syncBarsHeight);
     }
+
+// #endregion
+
   </script>
+
 </body>
 
 </html>
