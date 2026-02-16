@@ -312,7 +312,6 @@
 
     <div id="controls">
       <div id="info"></div>
-      <button id="btn-undo">↩️ Повернути</button>
       <button id="btn-complete">✅ Виконано</button>
       <button id="btn-follow">🧭 Слідкувати</button>
       <button id="btn-gmaps" disabled>🚗 Маршрут у Google Maps</button>
@@ -855,7 +854,6 @@
       }
       const infoEl = document.getElementById("info");
       const btnComplete = document.getElementById("btn-complete");
-      const btnUndo = document.getElementById("btn-undo");
       const btnGmaps = document.getElementById("btn-gmaps");
       const btnFollow = document.getElementById("btn-follow");
       const btnDelPin = document.getElementById("btn-del-pin");
@@ -1265,10 +1263,6 @@
         updateMarkerStyle(stop.id);
         renderInfo();
         sendToBot({ action: "complete", stop_id: stop.id });
-      });
-
-      btnUndo.addEventListener("click", () => {
-        sendToBot({ action: "undo" });
       });
 
       btnGmaps.addEventListener("click", () => {
