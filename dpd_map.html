@@ -268,6 +268,7 @@
     </div>
   </div>
   <!-- endregion -->
+  <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
 
   <script>
 
@@ -334,41 +335,68 @@
         }
         return combined;
       }
+      
       function buildShareUrl() {
-        // беремо тільки маршрутні точки (без pinned)
         const routeStops = stops
           .filter(s => !s.isPinned)
-          .slice()
-          .sort((a, b) => Number(a.id) - Number(b.id));
-        const chunks = routeStops.map((s) => {
-          const id = Number(s.id);
-          const lat = Number(s.lat);
-          const lng = Number(s.lng);
-          const done = s.done ? "1" : "0";
-          const label = (s.label === undefined || s.label === null) ? "" : String(s.label);
-          const addr = encodeURIComponent(String(s.address || ""));
-          return [id, lat, lng, done, label, addr].join(",");
-        });
-        const combined = chunks.join("|");
-        // розбивка, щоб URL не “рвався”
-        const PART_LEN = 1200;
-        const parts = [];
-        for (let i = 0; i < combined.length; i += PART_LEN) {
-          parts.push(combined.slice(i, i + PART_LEN));
-        }
+          .map(s => ({
+            id: Number(s.id),
+            lat: Number(s.lat),
+            lng: Number(s.lng),
+            done: !!s.done,
+            label: s.label ?? "",
+            address: String(s.address || "")
+          }))
+          .filter(s => isFinite(s.id) && isFinite(s.lat) && isFinite(s.lng));
+
+        const payload = {
+          v: 1,
+          current: (selectedStopId != null ? selectedStopId : 0),
+          stops: routeStops
+        };
+
+        const json = JSON.stringify(payload);
+        const packed = LZString.compressToEncodedURIComponent(json);
+
         const u = new URL(window.location.href);
+
+        // прибираємо старі довжелезні query stops*
         u.searchParams.delete("current");
         u.searchParams.delete("stops");
         for (let i = 2; i <= 99; i++) u.searchParams.delete("stops" + i);
-        if (parts[0]) u.searchParams.set("stops", parts[0]);
-        for (let i = 1; i < parts.length; i++) {
-          u.searchParams.set("stops" + (i + 1), parts[i]);
-        }
-        if (selectedStopId != null) u.searchParams.set("current", String(selectedStopId));
+
+        // кладемо все в hash
+        u.hash = "r=" + packed;
         return u.toString();
       }
+
       const stopsParam = collectStopsParam(params);
+      function getRouteFromHash() {
+        const h = (window.location.hash || "").replace(/^#/, "");
+        if (!h) return null;
+        const sp = new URLSearchParams(h);
+        const packed = sp.get("r");
+        if (!packed) return null;
+        try {
+          const json = LZString.decompressFromEncodedURIComponent(packed);
+          if (!json) return null;
+          const obj = JSON.parse(json);
+          return obj;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      let routeFromHash = null;
+      if (!stopsParam) {
+        routeFromHash = getRouteFromHash();
+      }
+
       const currentIdFromUrl = parseInt(params.get("current") || "0", 10);
+      let currentIdFromHash = 0;
+      if (routeFromHash && routeFromHash.current) {
+        currentIdFromHash = parseInt(String(routeFromHash.current || "0"), 10) || 0;
+      }
       let stops = [];
       function safeDecode(s) {
         try { return decodeURIComponent(s); } catch (e) { return s; }
@@ -398,6 +426,20 @@
           })
           .filter(Boolean);
       }
+      if (!stopsParam && routeFromHash && Array.isArray(routeFromHash.stops)) {
+        stops = routeFromHash.stops.map((s, index) => ({
+          id: Number(s.id),
+          lat: Number(s.lat),
+          lng: Number(s.lng),
+          done: !!s.done,
+          label: (s.label ?? (index + 1)),
+          address: String(s.address || `Зупинка #${index + 1}`),
+          regionGroup: 0,
+          regionColor: "#ef4444",
+          isPinned: false
+        })).filter(s => isFinite(s.id) && isFinite(s.lat) && isFinite(s.lng));
+      }
+
       if (!stops.length) {
         stops = [
           { id: 1, lat: 51.7005, lng: 8.7642, address: "Warburger Straße 3A, Paderborn", done: false, label: 1, regionGroup: 1, regionColor: "#ef4444", isPinned: false },
@@ -465,7 +507,7 @@
       const pinnedLoaded = loadPinnedStops();
       if (pinnedLoaded.length) stops = stops.concat(pinnedLoaded);
       let selectedStopId =
-        (currentIdFromUrl && stops.find((s) => s.id === currentIdFromUrl)?.id) ||
+        ((currentIdFromHash || currentIdFromUrl) && stops.find((s) => s.id === (currentIdFromHash || currentIdFromUrl))?.id) ||
         (stops[0] && stops[0].id) ||
         null;
       const markers = new Map();
@@ -1008,7 +1050,7 @@
         if (!currentGmapsUrl) return;
         window.open(currentGmapsUrl, "_blank");
       });
-      
+
       btnShare.addEventListener("click", async () => {
         const url = buildShareUrl();
         if (navigator.share) {
