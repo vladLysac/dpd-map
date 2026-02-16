@@ -354,6 +354,12 @@
       }
 
       function buildShareUrl() {
+        const addrPool = [];
+        function addAddr(s) {
+          addrPool.push(String(s || ""));
+          return addrPool.length - 1;
+        }
+
         const routeStops = stops
           .filter(s => !s.isPinned)
           .map(s => ({
@@ -362,13 +368,14 @@
             lng: Number(s.lng),
             done: !!s.done,
             label: s.label ?? "",
-            address: String(s.address || "")
+            a: addAddr(String(s.address || ""))   // ✅ замість address
           }))
           .filter(s => isFinite(s.id) && isFinite(s.lat) && isFinite(s.lng));
 
         const payload = {
-          v: 1,
+          v: 2, // ✅ було 1
           current: (selectedStopId != null ? selectedStopId : 0),
+          addr: addrPool,  // ✅ нове поле
           stops: routeStops
         };
 
@@ -377,15 +384,14 @@
 
         const u = new URL(window.location.href);
 
-        // прибираємо старі довжелезні query stops*
         u.searchParams.delete("current");
         u.searchParams.delete("stops");
         for (let i = 2; i <= 99; i++) u.searchParams.delete("stops" + i);
 
-        // кладемо все в hash
         u.hash = "r=" + packed;
         return u.toString();
       }
+
 
       const stopsParam = collectStopsParam(params);
       function getRouteFromHash() {
@@ -450,7 +456,12 @@
           lng: Number(s.lng),
           done: !!s.done,
           label: (s.label ?? (index + 1)),
-          address: String(s.address || `Зупинка #${index + 1}`),
+          address: String(
+            (s.address !== undefined)
+              ? s.address
+              : ((routeFromHash.addr || [])[s.a] || `Зупинка #${index + 1}`)
+          ),
+
           regionGroup: 0,
           regionColor: "#ef4444",
           isPinned: false
