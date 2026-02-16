@@ -353,12 +353,69 @@
         return combined;
       }
 
-      function buildShareUrl() {
-        const addrPool = [];
-        function addAddr(s) {
-          addrPool.push(String(s || ""));
-          return addrPool.length - 1;
+      const SHARE_ROUTE_KEY = "dpd_share_route_parts_v1";
+
+      function splitString(s, maxLen) {
+        const out = [];
+        for (let i = 0; i < s.length; i += maxLen) out.push(s.slice(i, i + maxLen));
+        return out;
+      }
+
+      function collectPackedFromQuery(p) {
+        let combined = "";
+        const first = p.get("r");
+        if (first) combined += first;
+        for (let i = 2; i <= 99; i++) {
+          const key = "r" + i;
+          const part = p.get(key);
+          if (!part) break;
+          combined += part;
         }
+        return combined || null;
+      }
+
+      function saveRoutePartToLocalStorage(routeKey, index1, total, packedPart) {
+        try {
+          const raw = localStorage.getItem(SHARE_ROUTE_KEY);
+          const db = raw ? JSON.parse(raw) : {};
+          if (!db[routeKey]) db[routeKey] = { total, parts: {} };
+          db[routeKey].total = total;
+
+          db[routeKey].parts[String(index1)] = packedPart;
+
+          localStorage.setItem(SHARE_ROUTE_KEY, JSON.stringify(db));
+
+          // перевірка “чи вже всі частини є”
+          const have = Object.keys(db[routeKey].parts).length;
+          if (have >= total) {
+            let combined = "";
+            for (let i = 1; i <= total; i++) {
+              const part = db[routeKey].parts[String(i)];
+              if (!part) return { ready: false, have, total, combined: null };
+              combined += part;
+            }
+            return { ready: true, have, total, combined };
+          }
+          return { ready: false, have, total, combined: null };
+        } catch (e) {
+          return { ready: false, have: 0, total, combined: null };
+        }
+      }
+
+      function clearRouteParts(routeKey) {
+        try {
+          const raw = localStorage.getItem(SHARE_ROUTE_KEY);
+          const db = raw ? JSON.parse(raw) : {};
+          delete db[routeKey];
+          localStorage.setItem(SHARE_ROUTE_KEY, JSON.stringify(db));
+        } catch (e) { }
+      }
+
+
+      function buildShareUrls() {
+        // 1) будуємо payload як у тебе
+        const addrPool = [];
+        function addAddr(s) { addrPool.push(String(s || "")); return addrPool.length - 1; }
 
         const routeStops = stops
           .filter(s => !s.isPinned)
@@ -368,28 +425,60 @@
             lng: Number(s.lng),
             done: !!s.done,
             label: s.label ?? "",
-            a: addAddr(String(s.address || ""))   // ✅ замість address
+            a: addAddr(String(s.address || ""))
           }))
           .filter(s => isFinite(s.id) && isFinite(s.lat) && isFinite(s.lng));
 
         const payload = {
-          v: 2, // ✅ було 1
+          v: 2,
           current: (selectedStopId != null ? selectedStopId : 0),
-          addr: addrPool,  // ✅ нове поле
+          addr: addrPool,
           stops: routeStops
         };
 
         const json = JSON.stringify(payload);
         const packed = LZString.compressToEncodedURIComponent(json);
 
-        const u = new URL(window.location.href);
+        // 2) ріжемо packed на шматки (тут головний трюк)
+        // 1200–1600 символів зазвичай безпечніше для WhatsApp/браузерів.
+        const PART_LEN = 1400;
+        const parts = splitString(packed, PART_LEN);
 
-        u.searchParams.delete("current");
-        u.searchParams.delete("stops");
-        for (let i = 2; i <= 99; i++) u.searchParams.delete("stops" + i);
+        // 3) генеруємо ключ маршруту (щоб localStorage збирав правильний комплект)
+        const routeKey = (Date.now().toString(36) + Math.random().toString(36).slice(2, 8)).toLowerCase();
 
-        u.hash = "r=" + packed;
-        return u.toString();
+        // 4) робимо список URL: ?rk=...&pi=1&pt=3&r=...&r2=...
+        // УВАГА: кожен лінк містить ТІЛЬКИ ОДНУ частину packed (так надійніше).
+        const urls = parts.map((part, idx) => {
+          const u = new URL(window.location.href);
+
+          // чистимо старе
+          u.hash = "";
+          u.searchParams.delete("current");
+          u.searchParams.delete("stops");
+          for (let i = 2; i <= 99; i++) u.searchParams.delete("stops" + i);
+
+          u.searchParams.delete("rk");
+          u.searchParams.delete("pi");
+          u.searchParams.delete("pt");
+
+
+          // чистимо r-частини якщо були
+          u.searchParams.delete("r");
+          for (let i = 2; i <= 99; i++) u.searchParams.delete("r" + i);
+
+          // додаємо службове
+          u.searchParams.set("rk", routeKey);
+          u.searchParams.set("pi", String(idx + 1));
+          u.searchParams.set("pt", String(parts.length));
+
+          // головне: r=part в QUERY
+          u.searchParams.set("r", part);
+
+          return u.toString();
+        });
+
+        return urls;
       }
 
 
@@ -410,10 +499,65 @@
         }
       }
 
+      function getRouteFromQueryParts(params) {
+        const routeKey = params.get("rk");
+        const pi = parseInt(params.get("pi") || "0", 10);
+        const pt = parseInt(params.get("pt") || "0", 10);
+        const part = params.get("r");
+
+        // якщо це НЕ part-лінк — пробуємо просто r/r2/r3... як один шматок
+        if (!routeKey || !pi || !pt || !part) {
+          const packed = collectPackedFromQuery(params); // ти вже написав цю функцію
+          if (!packed) return null;
+          try {
+            const json = LZString.decompressFromEncodedURIComponent(packed);
+            if (!json) return null;
+            return JSON.parse(json);
+          } catch (e) { return null; }
+        }
+
+        // це part-лінк: зберігаємо шматок у localStorage
+        const res = saveRoutePartToLocalStorage(routeKey, pi, pt, part);
+
+        // якщо ще не всі частини — показуємо повідомлення і НЕ ламаємо карту
+        if (!res.ready) {
+          showError(`Частина ${pi}/${pt} збережена ✅\nВідкрий наступні лінки по черзі.\nЗібрано: ${res.have}/${pt}`);
+          return null;
+        }
+
+        // коли всі частини зібрані — декомпрес і парс
+        try {
+          const json = LZString.decompressFromEncodedURIComponent(res.combined);
+          if (!json) return null;
+          const obj = JSON.parse(json);
+
+          // (опціонально) чистимо збереження, щоб не засмічувати localStorage
+          clearRouteParts(routeKey);
+
+          // (дуже корисно) переводимо в hash-формат і перезавантажуємо сторінку
+          // так маршрут відкриється “нормально” одним URL без query
+          const clean = new URL(window.location.href);
+          clean.search = "";
+          clean.hash = "r=" + res.combined;
+          window.location.replace(clean.toString());
+          return null;
+        } catch (e) {
+          return null;
+        }
+      }
+
+
       let routeFromHash = null;
       if (!stopsParam) {
-        routeFromHash = getRouteFromHash();
+        // 1) спочатку пробуємо з query (твій новий share-формат)
+        routeFromHash = getRouteFromQueryParts(params);
+
+        // 2) якщо не вийшло — пробуємо старий формат з hash
+        if (!routeFromHash) {
+          routeFromHash = getRouteFromHash();
+        }
       }
+
 
       const currentIdFromUrl = parseInt(params.get("current") || "0", 10);
       let currentIdFromHash = 0;
@@ -1079,21 +1223,59 @@
         window.open(currentGmapsUrl, "_blank");
       });
 
+      let shareStep = 0;
+      let shareCache = null;
+
       btnShare.addEventListener("click", async () => {
-        const url = buildShareUrl();
+        if (!shareCache) {
+          shareCache = buildShareUrls();
+          shareStep = 0;
+        }
+
+        const urls = shareCache;
+        if (!urls || !urls.length) {
+          alert("Немає що шарити (0 точок).");
+          shareCache = null;
+          return;
+        }
+        const url = urls[shareStep];
+        if (!url) {
+          shareCache = null;
+          alert("✅ Усі частини вже відправлені. Натисни Share ще раз, щоб згенерувати заново.");
+          return;
+        }
+
+        const msg = `DPD Route — Part ${shareStep + 1}/${urls.length}\nВідкрий цей лінк. Потім натисни Share ще раз для наступного.`;
+
+        // якщо є share — шлемо ОДИН лінк
         if (navigator.share) {
           try {
-            await navigator.share({ title: "DPD Route", text: "Ось мій маршрут:", url });
+            await navigator.share({ title: "DPD Route", text: msg, url });
+            shareStep++;
+            if (shareStep >= urls.length) {
+              shareCache = null;
+              alert("✅ Усі частини відправлені!");
+            }
             return;
           } catch (e) { }
         }
+
+        // fallback: копіюємо ОДИН лінк
         try {
           await navigator.clipboard.writeText(url);
-          alert("✅ Посилання скопійовано!");
+          alert(`✅ Скопійовано Part ${shareStep + 1}/${urls.length}\nВстав у WhatsApp і відправ.\nПотім натисни Share ще раз.`);
         } catch (e) {
-          window.prompt("Скопіюй посилання:", url);
+          window.prompt("Скопіюй лінк:", url);
+        }
+
+        shareStep++;
+        if (shareStep >= urls.length) {
+          shareCache = null;
+          alert("✅ Усі частини готові. Якщо треба — натисни Share ще раз, щоб згенерувати заново.");
         }
       });
+
+
 
       btnDelPin.addEventListener("click", () => {
         const stop = getStopById(selectedStopId);
