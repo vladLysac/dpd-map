@@ -2,6 +2,7 @@
 
 <!DOCTYPE html>
 <html lang="uk">
+
 <head>
   <meta charset="UTF-8" />
   <title>DPD Route Map</title>
@@ -11,9 +12,9 @@
   <script src="leaflet.js"></script>
   <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
 
-<!--#endregion  -->
+  <!--#endregion  -->
 
-<!-- #region App UI Layout & Theme -->
+  <!-- #region App UI Layout & Theme -->
   <style>
     :root {
       --topbar-h: 64px;
@@ -243,6 +244,7 @@
 <!-- #endregion -->
 
 <!-- #region UI Helpers -->
+
 <body>
   <div id="app">
     <div id="topbar">
@@ -261,10 +263,11 @@
       <button id="btn-complete">✅ Виконано</button>
       <button id="btn-follow">🧭 Слідкувати</button>
       <button id="btn-gmaps" disabled>🚗 Маршрут у Google Maps</button>
+      <button id="btn-share">🔗 Поділитися маршрутом</button>
       <button id="btn-del-pin">🗑️ Видалити точку</button>
     </div>
   </div>
-<!-- endregion -->
+  <!-- endregion -->
 
   <script>
 
@@ -330,6 +333,39 @@
           combined += part;
         }
         return combined;
+      }
+      function buildShareUrl() {
+        // беремо тільки маршрутні точки (без pinned)
+        const routeStops = stops
+          .filter(s => !s.isPinned)
+          .slice()
+          .sort((a, b) => Number(a.id) - Number(b.id));
+        const chunks = routeStops.map((s) => {
+          const id = Number(s.id);
+          const lat = Number(s.lat);
+          const lng = Number(s.lng);
+          const done = s.done ? "1" : "0";
+          const label = (s.label === undefined || s.label === null) ? "" : String(s.label);
+          const addr = encodeURIComponent(String(s.address || ""));
+          return [id, lat, lng, done, label, addr].join(",");
+        });
+        const combined = chunks.join("|");
+        // розбивка, щоб URL не “рвався”
+        const PART_LEN = 1200;
+        const parts = [];
+        for (let i = 0; i < combined.length; i += PART_LEN) {
+          parts.push(combined.slice(i, i + PART_LEN));
+        }
+        const u = new URL(window.location.href);
+        u.searchParams.delete("current");
+        u.searchParams.delete("stops");
+        for (let i = 2; i <= 99; i++) u.searchParams.delete("stops" + i);
+        if (parts[0]) u.searchParams.set("stops", parts[0]);
+        for (let i = 1; i < parts.length; i++) {
+          u.searchParams.set("stops" + (i + 1), parts[i]);
+        }
+        if (selectedStopId != null) u.searchParams.set("current", String(selectedStopId));
+        return u.toString();
       }
       const stopsParam = collectStopsParam(params);
       const currentIdFromUrl = parseInt(params.get("current") || "0", 10);
@@ -411,9 +447,9 @@
         }
       }
 
-// #endregion
+      // #endregion
 
-// #region Map Initialization & State Setup
+      // #region Map Initialization & State Setup
 
       function savePinnedStops() {
         try {
@@ -488,9 +524,9 @@
             map.setBearing(newBearing);
           }, { passive: false });
 
-// #endregion
+          // #endregion
 
-// #region Map Gesture Controls
+          // #region Map Gesture Controls
 
           function endPointer(e) {
             if (pointers.has(e.pointerId)) pointers.delete(e.pointerId);
@@ -505,9 +541,9 @@
         }
       })();
 
-// #endregion
+      // #endregion
 
-// #region Marker Styling & UI References
+      // #region Marker Styling & UI References
 
       function getStopById(id) {
         return stops.find((s) => s.id === id);
@@ -556,14 +592,15 @@
       const btnGmaps = document.getElementById("btn-gmaps");
       const btnFollow = document.getElementById("btn-follow");
       const btnDelPin = document.getElementById("btn-del-pin");
+      const btnShare = document.getElementById("btn-share");
       const searchInput = document.getElementById("search-input");
       const btnSearch = document.getElementById("btn-search");
       const searchResults = document.getElementById("search-results");
       let currentGmapsUrl = null;
 
-// #endregion
+      // #endregion
 
-// #region Stop Interaction & Controls
+      // #region Stop Interaction & Controls
 
       function setPinnedDeleteUI(stop) {
         if (stop && stop.isPinned) btnDelPin.style.display = "inline-block";
@@ -673,9 +710,9 @@
           activePointerId = null;
           moved = false;
         }
-// #endregion
+        // #endregion
 
-// #region Pinned Stop Creation & Long Press
+        // #region Pinned Stop Creation & Long Press
 
         function createPinnedStop(lat, lng, addressText) {
           const id = "pinned_" + Date.now();
@@ -739,9 +776,9 @@
         window.__createPinnedStop = createPinnedStop;
       })();
 
-// #endregion 
+      // #endregion 
 
-// #region Address Search & Geolocation
+      // #region Address Search & Geolocation
 
       const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
       const NOMINATIM_LIMIT = 6;
@@ -887,9 +924,9 @@
         }
         requestAnimationFrame(step);
       }
-// #endregion
+      // #endregion
 
-// #region Follow Mode (GPS Tracking)
+      // #region Follow Mode (GPS Tracking)
 
       let followEnabled = false;
 
@@ -949,7 +986,7 @@
         );
       }
 
-// #endregion
+      // #endregion
 
       // #region Action Buttons Handlers
       btnComplete.addEventListener("click", () => {
@@ -957,7 +994,6 @@
         const stop = getStopById(selectedStopId);
         if (!stop) return;
         if (stop.isPinned) return;
-
         stop.done = true;
         updateMarkerStyle(stop.id);
         renderInfo();
@@ -971,6 +1007,22 @@
       btnGmaps.addEventListener("click", () => {
         if (!currentGmapsUrl) return;
         window.open(currentGmapsUrl, "_blank");
+      });
+      
+      btnShare.addEventListener("click", async () => {
+        const url = buildShareUrl();
+        if (navigator.share) {
+          try {
+            await navigator.share({ title: "DPD Route", text: "Ось мій маршрут:", url });
+            return;
+          } catch (e) { }
+        }
+        try {
+          await navigator.clipboard.writeText(url);
+          alert("✅ Посилання скопійовано!");
+        } catch (e) {
+          window.prompt("Скопіюй посилання:", url);
+        }
       });
 
       btnDelPin.addEventListener("click", () => {
@@ -1003,7 +1055,7 @@
       window.addEventListener("resize", syncBarsHeight);
     }
 
-// #endregion
+    // #endregion
 
   </script>
 
