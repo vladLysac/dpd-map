@@ -252,6 +252,44 @@
     .leaflet-control-attribution a {
       pointer-events: none !important;
     }
+
+    #toast-layer {
+      position: fixed;
+      left: 50%;
+      transform: translateX(-50%);
+      top: calc(var(--topbar-h) + 10px);
+      z-index: 10050;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: min(520px, calc(100vw - 16px));
+      pointer-events: none;
+    }
+
+    .toast {
+      pointer-events: none;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(0, 0, 0, 0.90);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+      font-size: 13px;
+      line-height: 1.25;
+      color: #fff;
+      white-space: pre-line;
+    }
+
+    .toast.good {
+      border-color: rgba(34, 197, 94, 0.45);
+    }
+
+    .toast.warn {
+      border-color: rgba(249, 115, 22, 0.45);
+    }
+
+    .toast.bad {
+      border-color: rgba(239, 68, 68, 0.55);
+    }
   </style>
 </head>
 
@@ -261,6 +299,7 @@
 
 <body>
   <div id="app">
+    <div id="toast-layer"></div>
     <div id="topbar">
       <div id="search-wrap">
         <input id="search-input" type="text" placeholder="Пошук адреси (напр: Hauptstraße 12, Warstein)"
@@ -290,17 +329,29 @@
   <script>
 
     //#region UI Error Handling
+    function showToast(msg, kind = "warn", ms = 2800) {
+      const layer = document.getElementById("toast-layer");
+      if (!layer) return;
+
+      const t = document.createElement("div");
+      t.className = "toast " + (kind || "warn");
+      t.textContent = String(msg || "");
+      layer.appendChild(t);
+
+      setTimeout(() => {
+        try { t.remove(); } catch (e) { }
+      }, Math.max(900, ms));
+    }
+
     function showError(msg) {
-      const el = document.createElement("div");
-      el.style.padding = "16px";
-      el.style.color = "#ff8080";
-      el.style.fontSize = "14px";
-      el.textContent = msg;
+      // фатальна помилка: покажемо toast + текст у карті (щоб не було порожньо)
+      showToast(msg, "bad", 4500);
       const mapEl = document.getElementById("map");
-      mapEl.innerHTML = "";
-      mapEl.appendChild(el);
+      if (!mapEl) return;
+      mapEl.innerHTML = `<div style="padding:16px;color:#ff8080;font-size:14px;white-space:pre-line;">${String(msg || "")}</div>`;
     }
     // #endregion
+
 
     // #region syncLayoutInsets()
     function syncBarsHeight() {
@@ -521,9 +572,14 @@
 
         // якщо ще не всі частини — показуємо повідомлення і НЕ ламаємо карту
         if (!res.ready) {
-          showError(`Частина ${pi}/${pt} збережена ✅\nВідкрий наступні лінки по черзі.\nЗібрано: ${res.have}/${pt}`);
+          showToast(
+            `✅ Частина ${pi}/${pt} збережена\nВідкрий наступні лінки по черзі.\nЗібрано: ${res.have}/${pt}`,
+            "good",
+            3800
+          );
           return null;
         }
+
 
         // коли всі частини зібрані — декомпрес і парс
         try {
@@ -613,12 +669,9 @@
       }
 
       if (!stops.length) {
-        stops = [
-          { id: 1, lat: 51.7005, lng: 8.7642, address: "Warburger Straße 3A, Paderborn", done: false, label: 1, regionGroup: 1, regionColor: "#ef4444", isPinned: false },
-          { id: 2, lat: 51.7020, lng: 8.7610, address: "Dahler Str. 2, Paderborn", done: false, label: 2, regionGroup: 1, regionColor: "#ef4444", isPinned: false },
-          { id: 3, lat: 51.7050, lng: 8.7600, address: "Sebastianstraße 7, Paderborn", done: false, label: 1, regionGroup: 2, regionColor: "#3b82f6", isPinned: false },
-        ];
+        stops = [];
       }
+
       const REGION_COLORS = [
         "#ef4444", "#3b82f6", "#eab308", "#a855f7",
         "#22c55e", "#f97316", "#14b8a6", "#ec4899",
@@ -1234,10 +1287,11 @@
 
         const urls = shareCache;
         if (!urls || !urls.length) {
-          alert("Немає що шарити (0 точок).");
+          showToast("ℹ️ Немає що шарити (0 точок).", "warn", 2800);
           shareCache = null;
           return;
         }
+
         const url = urls[shareStep];
         if (!url) {
           shareCache = null;
