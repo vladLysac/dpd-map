@@ -234,6 +234,25 @@
       display: none;
     }
 
+    #btn-share {
+      flex: 0 0 auto;
+      /* НЕ розтягуй */
+      width: auto;
+      /* ширина по контенту */
+      padding: 8px 10px;
+      /* менша */
+      font-size: 13px;
+      /* дрібніший текст */
+      font-weight: 700;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.10);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      white-space: nowrap;
+      /* щоб не переносилося */
+    }
+
+
     .leaflet-control-attribution,
     .leaflet-control-attribution a {
       pointer-events: none !important;
@@ -268,7 +287,10 @@
     </div>
   </div>
   <!-- endregion -->
+
+  <!--#region Script -->
   <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
+  <!-- #endregion -->
 
   <script>
 
@@ -335,7 +357,7 @@
         }
         return combined;
       }
-      
+
       function buildShareUrl() {
         const routeStops = stops
           .filter(s => !s.isPinned)
