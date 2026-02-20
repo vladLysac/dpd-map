@@ -1,28 +1,36 @@
 // sw.js
-const SHELL_CACHE = "luxroute-shell-v1";
+const SHELL_CACHE = "luxroute-shell-v2"; // <- підняв версію, щоб точно оновилось
 const TILE_CACHE  = "luxroute-tiles-v1";
 
 const SHELL_ASSETS = [
-  "./",            // щоб корінь працював
   "./dpd_map.html",
   "./leaflet.css",
-  "./leaflet.js"
+  "./leaflet.js",
+  "./leaflet-rotate-src.js",
+  "./telegram-web-app.js",
 ];
 
-// простий ліміт на тайли (щоб не роздувати сховище)
 const MAX_TILES = 250;
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(SHELL_CACHE).then((c) => c.addAll(SHELL_ASSETS)).then(() => self.skipWaiting())
+    caches.open(SHELL_CACHE)
+      .then((c) => c.addAll(SHELL_ASSETS))
+      .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil((async () => {
+    // прибираємо старі shell-кеші
+    const keys = await caches.keys();
+    await Promise.all(keys.map((k) => {
+      if (k.startsWith("luxroute-shell-") && k !== SHELL_CACHE) return caches.delete(k);
+    }));
+    await self.clients.claim();
+  })());
 });
 
-// helper: обрізати кеш тайлів до MAX_TILES
 async function trimTileCache() {
   const cache = await caches.open(TILE_CACHE);
   const keys = await cache.keys();
@@ -45,26 +53,43 @@ self.addEventListener("fetch", (event) => {
   const req = event.request;
   const url = new URL(req.url);
 
-  // 1) App shell — cache-first (відкривається офлайн)
-  const isShellAsset =
-    url.pathname.endsWith("/dpd_map.html") ||
-    url.pathname.endsWith("/leaflet.css") ||
-    url.pathname.endsWith("/leaflet.js") ||
-    url.pathname === "/" ||
-    url.pathname.endsWith("/");
-
-  if (isShellAsset) {
-    event.respondWith(
-      caches.match(req).then((cached) => cached || fetch(req).then((resp) => {
-        const copy = resp.clone();
-        caches.open(SHELL_CACHE).then((c) => c.put(req, copy));
-        return resp;
-      }))
-    );
+  // 0) Навігація (відкриття сторінки) — даємо офлайн fallback
+  if (req.mode === "navigate") {
+    event.respondWith((async () => {
+      const cached = await caches.match("./dpd_map.html");
+      try {
+        return await fetch(req);
+      } catch (e) {
+        return cached || Response.error();
+      }
+    })());
     return;
   }
 
-  // 2) OSM tiles — stale-while-revalidate (але без масового prefetch)
+  // 1) App shell — cache-first
+  const isShellAsset =
+    url.origin === self.location.origin &&
+    (
+      url.pathname.endsWith("/dpd_map.html") ||
+      url.pathname.endsWith("/leaflet.css") ||
+      url.pathname.endsWith("/leaflet.js") ||
+      url.pathname.endsWith("/leaflet-rotate-src.js") ||
+      url.pathname.endsWith("/telegram-web-app.js")
+    );
+
+  if (isShellAsset) {
+    event.respondWith((async () => {
+      const cached = await caches.match(req);
+      if (cached) return cached;
+      const resp = await fetch(req);
+      const copy = resp.clone();
+      caches.open(SHELL_CACHE).then((c) => c.put(req, copy));
+      return resp;
+    })());
+    return;
+  }
+
+  // 2) OSM tiles — stale-while-revalidate
   const isOsmTile = url.hostname === "tile.openstreetmap.org";
   if (isOsmTile) {
     event.respondWith((async () => {
@@ -72,17 +97,16 @@ self.addEventListener("fetch", (event) => {
       const cached = await cache.match(req);
 
       const fetchPromise = fetch(req).then((resp) => {
-        // кешуємо тільки успішні тайли
         if (resp && resp.ok) {
           cache.put(req, resp.clone()).then(trimTileCache);
         }
         return resp;
-      }).catch(() => cached); // якщо офлайн — віддамо кеш
+      }).catch(() => cached);
 
       return cached || fetchPromise;
     })());
     return;
   }
 
-  // інше — як є
+  // інше — браузер сам
 });
