@@ -3,11 +3,14 @@ const SHELL_CACHE = "luxroute-shell-v2"; // <- підняв версію, щоб
 const TILE_CACHE  = "luxroute-tiles-v1";
 
 const SHELL_ASSETS = [
+  "./",
   "./dpd_map.html",
   "./leaflet.css",
   "./leaflet.js",
   "./leaflet-rotate-src.js",
   "./telegram-web-app.js",
+  "./lz-string.min.js",
+  "./sw.js"
 ];
 
 const MAX_TILES = 250;
