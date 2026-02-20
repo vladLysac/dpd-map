@@ -1,9 +1,8 @@
 // sw.js
 const SHELL_CACHE = "luxroute-shell-v2"; // <- підняв версію, щоб точно оновилось
-const TILE_CACHE  = "luxroute-tiles-v1";
+const TILE_CACHE = "luxroute-tiles-v1";
 
 const SHELL_ASSETS = [
-  "./",
   "./dpd_map.html",
   "./leaflet.css",
   "./leaflet.js",
@@ -77,7 +76,8 @@ self.addEventListener("fetch", (event) => {
       url.pathname.endsWith("/leaflet.css") ||
       url.pathname.endsWith("/leaflet.js") ||
       url.pathname.endsWith("/leaflet-rotate-src.js") ||
-      url.pathname.endsWith("/telegram-web-app.js")
+      url.pathname.endsWith("/telegram-web-app.js") ||
+      url.pathname.endsWith("/lz-string.min.js")
     );
 
   if (isShellAsset) {
