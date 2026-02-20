@@ -1,17 +1,23 @@
 // sw.js
-const SHELL_CACHE = "luxroute-shell-v2"; // <- підняв версію, щоб точно оновилось
-const TILE_CACHE = "luxroute-tiles-v1";
 
+const SHELL_CACHE = "luxroute-shell-v3"; // підніми версію якщо ще раз будеш міняти shell
+const TILE_CACHE  = "luxroute-tiles-v1";
+
+// базовий шлях, де лежить sw.js (наприклад: /dpd-map/)
+const BASE = new URL(self.registration.scope).pathname;
+
+// файли “оболонки”, які мають відкриватися офлайн
 const SHELL_ASSETS = [
-  "./dpd_map.html",
-  "./leaflet.css",
-  "./leaflet.js",
-  "./leaflet-rotate-src.js",
-  "./telegram-web-app.js",
-  "./lz-string.min.js",
-  "./sw.js"
+  BASE + "dpd_map.html",
+  BASE + "leaflet.css",
+  BASE + "leaflet.js",
+  BASE + "leaflet-rotate-src.js",
+  BASE + "telegram-web-app.js",
+  BASE + "lz-string.min.js",
+  BASE + "sw.js",
 ];
 
+// простий ліміт на тайли (щоб не роздувати сховище)
 const MAX_TILES = 250;
 
 self.addEventListener("install", (event) => {
@@ -27,12 +33,15 @@ self.addEventListener("activate", (event) => {
     // прибираємо старі shell-кеші
     const keys = await caches.keys();
     await Promise.all(keys.map((k) => {
-      if (k.startsWith("luxroute-shell-") && k !== SHELL_CACHE) return caches.delete(k);
+      if (k.startsWith("luxroute-shell-") && k !== SHELL_CACHE) {
+        return caches.delete(k);
+      }
     }));
     await self.clients.claim();
   })());
 });
 
+// helper: обрізати кеш тайлів до MAX_TILES
 async function trimTileCache() {
   const cache = await caches.open(TILE_CACHE);
   const keys = await cache.keys();
@@ -47,7 +56,10 @@ self.addEventListener("message", (event) => {
     event.waitUntil(caches.delete(TILE_CACHE));
   }
   if (msg.type === "CLEAR_ALL") {
-    event.waitUntil(Promise.all([caches.delete(TILE_CACHE), caches.delete(SHELL_CACHE)]));
+    event.waitUntil(Promise.all([
+      caches.delete(TILE_CACHE),
+      caches.delete(SHELL_CACHE)
+    ]));
   }
 });
 
@@ -55,10 +67,14 @@ self.addEventListener("fetch", (event) => {
   const req = event.request;
   const url = new URL(req.url);
 
-  // 0) Навігація (відкриття сторінки) — даємо офлайн fallback
+  // 0) Навігація (відкриття сторінки) — офлайн fallback
+  // ВАЖЛИВО: ignoreSearch, щоб /dpd_map.html?rk=... знаходилось як /dpd_map.html
   if (req.mode === "navigate") {
     event.respondWith((async () => {
-      const cached = await caches.match("./dpd_map.html");
+      const cached =
+        await caches.match(req, { ignoreSearch: true }) ||
+        await caches.match(BASE + "dpd_map.html", { ignoreSearch: true });
+
       try {
         return await fetch(req);
       } catch (e) {
@@ -68,7 +84,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 1) App shell — cache-first
+  // 1) App shell — cache-first (локальні файли)
   const isShellAsset =
     url.origin === self.location.origin &&
     (
@@ -77,16 +93,20 @@ self.addEventListener("fetch", (event) => {
       url.pathname.endsWith("/leaflet.js") ||
       url.pathname.endsWith("/leaflet-rotate-src.js") ||
       url.pathname.endsWith("/telegram-web-app.js") ||
-      url.pathname.endsWith("/lz-string.min.js")
+      url.pathname.endsWith("/lz-string.min.js") ||
+      url.pathname.endsWith("/sw.js")
     );
 
   if (isShellAsset) {
     event.respondWith((async () => {
-      const cached = await caches.match(req);
+      const cached = await caches.match(req, { ignoreSearch: true });
       if (cached) return cached;
+
       const resp = await fetch(req);
-      const copy = resp.clone();
-      caches.open(SHELL_CACHE).then((c) => c.put(req, copy));
+      if (resp && resp.ok) {
+        const copy = resp.clone();
+        caches.open(SHELL_CACHE).then((c) => c.put(req, copy));
+      }
       return resp;
     })());
     return;
@@ -111,5 +131,5 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // інше — браузер сам
+  // 3) Інше — як є (браузер)
 });
