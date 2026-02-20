@@ -1,7 +1,7 @@
 // sw.js
 
-const SHELL_CACHE = "luxroute-shell-v3"; // підніми версію якщо ще раз будеш міняти shell
-const TILE_CACHE  = "luxroute-tiles-v1";
+const SHELL_CACHE = "luxroute-shell-v4"; // підніми версію якщо ще раз будеш міняти shell
+const TILE_CACHE = "luxroute-tiles-v1";
 
 // базовий шлях, де лежить sw.js (наприклад: /dpd-map/)
 const BASE = new URL(self.registration.scope).pathname;
@@ -71,15 +71,23 @@ self.addEventListener("fetch", (event) => {
   // ВАЖЛИВО: ignoreSearch, щоб /dpd_map.html?rk=... знаходилось як /dpd_map.html
   if (req.mode === "navigate") {
     event.respondWith((async () => {
+
       const cached =
         await caches.match(req, { ignoreSearch: true }) ||
         await caches.match(BASE + "dpd_map.html", { ignoreSearch: true });
 
+      // якщо офлайн — навіть не пробуємо fetch
+      if (!navigator.onLine) {
+        return cached || Response.error();
+      }
+
       try {
-        return await fetch(req);
+        const networkResp = await fetch(req);
+        return networkResp;
       } catch (e) {
         return cached || Response.error();
       }
+
     })());
     return;
   }
