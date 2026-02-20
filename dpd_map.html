@@ -522,7 +522,7 @@
         // 4) робимо список URL: ?rk=...&pi=1&pt=3&r=...&r2=...
         // УВАГА: кожен лінк містить ТІЛЬКИ ОДНУ частину packed (так надійніше).
         const urls = parts.map((part, idx) => {
-          const u = new URL(window.location.href);
+          const u = new URL(window.location.origin + window.location.pathname);
 
           // чистимо старе
           u.hash = "";
@@ -545,7 +545,7 @@
           u.searchParams.set("pt", String(parts.length));
 
           // головне: r=part в QUERY
-          u.searchParams.set("r", part);
+          u.hash = "r=" + part;
 
           return u.toString();
         });
@@ -575,18 +575,10 @@
         const routeKey = params.get("rk");
         const pi = parseInt(params.get("pi") || "0", 10);
         const pt = parseInt(params.get("pt") || "0", 10);
-        const part = params.get("r");
+        const part = (new URLSearchParams((window.location.hash || "").replace(/^#/, ""))).get("r");
 
         // якщо це НЕ part-лінк — пробуємо просто r/r2/r3... як один шматок
-        if (!routeKey || !pi || !pt || !part) {
-          const packed = collectPackedFromQuery(params); // ти вже написав цю функцію
-          if (!packed) return null;
-          try {
-            const json = LZString.decompressFromEncodedURIComponent(packed);
-            if (!json) return null;
-            return JSON.parse(json);
-          } catch (e) { return null; }
-        }
+        if (!routeKey || !pi || !pt || !part) return null;
 
         // це part-лінк: зберігаємо шматок у localStorage
         const res = saveRoutePartToLocalStorage(routeKey, pi, pt, part);

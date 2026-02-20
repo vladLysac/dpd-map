@@ -1,6 +1,6 @@
 // sw.js
 
-const SHELL_CACHE = "luxroute-shell-v4"; // підніми версію якщо ще раз будеш міняти shell
+const SHELL_CACHE = "luxroute-shell-v5"; // підніми версію якщо ще раз будеш міняти shell
 const TILE_CACHE = "luxroute-tiles-v1";
 
 // базовий шлях, де лежить sw.js (наприклад: /dpd-map/)
