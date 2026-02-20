@@ -366,7 +366,6 @@
     }
     // #endregion
 
-
     // #region syncLayoutInsets()
     function syncBarsHeight() {
       const topbar = document.getElementById("topbar");
@@ -383,7 +382,15 @@
       tg.ready();
       tg.expand();
       tg.enableClosingConfirmation();
+
+      // ===== OFFLINE SERVICE WORKER (LuxRoute) =====
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("./sw.js")
+          .then(() => console.log("SW registered ✅"))
+          .catch(err => console.log("SW error:", err));
+      }
     }
+
     // #endregion
 
     //#region sendBridgeEvent()
