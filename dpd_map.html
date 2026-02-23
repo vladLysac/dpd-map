@@ -7,10 +7,10 @@
   <meta charset="UTF-8" />
   <title>DPD Route Map</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <script src="telegram-web-app.js"></script>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="leaflet.css" />
   <script src="leaflet.js"></script>
-  <script src="leaflet-rotate-src.js"></script>
+  <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
 
   <!--#endregion  -->
 
@@ -252,59 +252,6 @@
     .leaflet-control-attribution a {
       pointer-events: none !important;
     }
-
-    #toast-layer {
-      position: fixed;
-      left: 50%;
-      transform: translateX(-50%);
-      top: calc(var(--topbar-h) + 10px);
-      z-index: 10050;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      width: min(520px, calc(100vw - 16px));
-      pointer-events: none;
-    }
-
-    .toast {
-      pointer-events: none;
-      padding: 10px 12px;
-      border-radius: 12px;
-      background: rgba(0, 0, 0, 0.90);
-      border: 1px solid rgba(255, 255, 255, 0.14);
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
-      font-size: 13px;
-      line-height: 1.25;
-      color: #fff;
-      white-space: pre-line;
-    }
-
-    .toast.good {
-      border-color: rgba(34, 197, 94, 0.45);
-    }
-
-    .toast.warn {
-      border-color: rgba(249, 115, 22, 0.45);
-    }
-
-    .toast.bad {
-      border-color: rgba(239, 68, 68, 0.55);
-    }
-
-    /* ===== BIG COMPLETE BUTTON ===== */
-
-    .big-complete {
-      width: 100%;
-      flex: 0 0 100%;
-      padding: 16px 12px;
-      font-size: 18px;
-      font-weight: 800;
-      border-radius: 14px;
-      margin-top: 6px;
-      background: #16a34a;
-      color: white;
-      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
-    }
   </style>
 </head>
 
@@ -314,7 +261,6 @@
 
 <body>
   <div id="app">
-    <div id="toast-layer"></div>
     <div id="topbar">
       <div id="search-wrap">
         <input id="search-input" type="text" placeholder="Пошук адреси (напр: Hauptstraße 12, Warstein)"
@@ -327,62 +273,32 @@
 
     <div id="controls">
       <div id="info"></div>
+      <button id="btn-undo">↩️ Повернути</button>
+      <button id="btn-complete">✅ Виконано</button>
       <button id="btn-follow">🧭 Слідкувати</button>
       <button id="btn-gmaps" disabled>🚗 Маршрут у Google Maps</button>
       <button id="btn-share">🔗</button>
       <button id="btn-del-pin">🗑️ Видалити точку</button>
-      <button id="btn-complete">✅ Виконано</button>
     </div>
   </div>
   <!-- endregion -->
 
   <!--#region Script -->
-  <script src="lz-string.min.js"></script>
-
-  <script>
-    (function () {
-      // Працюємо тільки на Android і тільки коли є #r=...
-      const hash = window.location.hash || "";
-      if (!hash.startsWith("#r=")) return;
-      if (!/Android/i.test(navigator.userAgent)) return;
-
-      // Щоб не робити нескінченний редірект: мітка під конкретний маршрут
-      const key = "appAttempted_" + hash.slice(0, 60); // обрізаємо, щоб не було гігантського ключа
-      if (sessionStorage.getItem(key)) return;
-      sessionStorage.setItem(key, "1");
-
-      // Спроба відкрити додаток
-      const appUrl = "dpdmap://open" + hash;
-      window.location.href = appUrl;
-
-      // Якщо не відкрився — залишаємося на карті (нічого не робимо)
-    })();
-  </script>
+  <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
   <!-- #endregion -->
 
   <script>
 
     //#region UI Error Handling
-    function showToast(msg, kind = "warn", ms = 2800) {
-      const layer = document.getElementById("toast-layer");
-      if (!layer) return;
-
-      const t = document.createElement("div");
-      t.className = "toast " + (kind || "warn");
-      t.textContent = String(msg || "");
-      layer.appendChild(t);
-
-      setTimeout(() => {
-        try { t.remove(); } catch (e) { }
-      }, Math.max(900, ms));
-    }
-
     function showError(msg) {
-      // фатальна помилка: покажемо toast + текст у карті (щоб не було порожньо)
-      showToast(msg, "bad", 4500);
+      const el = document.createElement("div");
+      el.style.padding = "16px";
+      el.style.color = "#ff8080";
+      el.style.fontSize = "14px";
+      el.textContent = msg;
       const mapEl = document.getElementById("map");
-      if (!mapEl) return;
-      mapEl.innerHTML = `<div style="padding:16px;color:#ff8080;font-size:14px;white-space:pre-line;">${String(msg || "")}</div>`;
+      mapEl.innerHTML = "";
+      mapEl.appendChild(el);
     }
     // #endregion
 
@@ -402,15 +318,7 @@
       tg.ready();
       tg.expand();
       tg.enableClosingConfirmation();
-
-      // ===== OFFLINE SERVICE WORKER (LuxRoute) =====
-      if ("serviceWorker" in navigator) {
-        navigator.serviceWorker.register("./sw.js")
-          .then(() => console.log("SW registered ✅"))
-          .catch(err => console.log("SW error:", err));
-      }
     }
-
     // #endregion
 
     //#region sendBridgeEvent()
@@ -542,7 +450,7 @@
         // 4) робимо список URL: ?rk=...&pi=1&pt=3&r=...&r2=...
         // УВАГА: кожен лінк містить ТІЛЬКИ ОДНУ частину packed (так надійніше).
         const urls = parts.map((part, idx) => {
-          const u = new URL(window.location.origin + window.location.pathname);
+          const u = new URL(window.location.href);
 
           // чистимо старе
           u.hash = "";
@@ -565,7 +473,7 @@
           u.searchParams.set("pt", String(parts.length));
 
           // головне: r=part в QUERY
-          u.hash = "r=" + part;
+          u.searchParams.set("r", part);
 
           return u.toString();
         });
@@ -595,24 +503,27 @@
         const routeKey = params.get("rk");
         const pi = parseInt(params.get("pi") || "0", 10);
         const pt = parseInt(params.get("pt") || "0", 10);
-        const part = (new URLSearchParams((window.location.hash || "").replace(/^#/, ""))).get("r");
+        const part = params.get("r");
 
         // якщо це НЕ part-лінк — пробуємо просто r/r2/r3... як один шматок
-        if (!routeKey || !pi || !pt || !part) return null;
+        if (!routeKey || !pi || !pt || !part) {
+          const packed = collectPackedFromQuery(params); // ти вже написав цю функцію
+          if (!packed) return null;
+          try {
+            const json = LZString.decompressFromEncodedURIComponent(packed);
+            if (!json) return null;
+            return JSON.parse(json);
+          } catch (e) { return null; }
+        }
 
         // це part-лінк: зберігаємо шматок у localStorage
         const res = saveRoutePartToLocalStorage(routeKey, pi, pt, part);
 
         // якщо ще не всі частини — показуємо повідомлення і НЕ ламаємо карту
         if (!res.ready) {
-          showToast(
-            `✅ Частина ${pi}/${pt} збережена\nВідкрий наступні лінки по черзі.\nЗібрано: ${res.have}/${pt}`,
-            "good",
-            3800
-          );
+          showError(`Частина ${pi}/${pt} збережена ✅\nВідкрий наступні лінки по черзі.\nЗібрано: ${res.have}/${pt}`);
           return null;
         }
-
 
         // коли всі частини зібрані — декомпрес і парс
         try {
@@ -702,9 +613,12 @@
       }
 
       if (!stops.length) {
-        stops = [];
+        stops = [
+          { id: 1, lat: 51.7005, lng: 8.7642, address: "Warburger Straße 3A, Paderborn", done: false, label: 1, regionGroup: 1, regionColor: "#ef4444", isPinned: false },
+          { id: 2, lat: 51.7020, lng: 8.7610, address: "Dahler Str. 2, Paderborn", done: false, label: 2, regionGroup: 1, regionColor: "#ef4444", isPinned: false },
+          { id: 3, lat: 51.7050, lng: 8.7600, address: "Sebastianstraße 7, Paderborn", done: false, label: 1, regionGroup: 2, regionColor: "#3b82f6", isPinned: false },
+        ];
       }
-
       const REGION_COLORS = [
         "#ef4444", "#3b82f6", "#eab308", "#a855f7",
         "#22c55e", "#f97316", "#14b8a6", "#ec4899",
@@ -888,6 +802,7 @@
       }
       const infoEl = document.getElementById("info");
       const btnComplete = document.getElementById("btn-complete");
+      const btnUndo = document.getElementById("btn-undo");
       const btnGmaps = document.getElementById("btn-gmaps");
       const btnFollow = document.getElementById("btn-follow");
       const btnDelPin = document.getElementById("btn-del-pin");
@@ -1299,6 +1214,10 @@
         sendToBot({ action: "complete", stop_id: stop.id });
       });
 
+      btnUndo.addEventListener("click", () => {
+        sendToBot({ action: "undo" });
+      });
+
       btnGmaps.addEventListener("click", () => {
         if (!currentGmapsUrl) return;
         window.open(currentGmapsUrl, "_blank");
@@ -1315,11 +1234,10 @@
 
         const urls = shareCache;
         if (!urls || !urls.length) {
-          showToast("ℹ️ Немає що шарити (0 точок).", "warn", 2800);
+          alert("Немає що шарити (0 точок).");
           shareCache = null;
           return;
         }
-
         const url = urls[shareStep];
         if (!url) {
           shareCache = null;
