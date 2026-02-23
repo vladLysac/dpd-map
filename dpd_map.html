@@ -338,6 +338,26 @@
 
   <!--#region Script -->
   <script src="lz-string.min.js"></script>
+
+  <script>
+    (function () {
+      // Працюємо тільки на Android і тільки коли є #r=...
+      const hash = window.location.hash || "";
+      if (!hash.startsWith("#r=")) return;
+      if (!/Android/i.test(navigator.userAgent)) return;
+
+      // Щоб не робити нескінченний редірект: мітка під конкретний маршрут
+      const key = "appAttempted_" + hash.slice(0, 60); // обрізаємо, щоб не було гігантського ключа
+      if (sessionStorage.getItem(key)) return;
+      sessionStorage.setItem(key, "1");
+
+      // Спроба відкрити додаток
+      const appUrl = "dpdmap://open" + hash;
+      window.location.href = appUrl;
+
+      // Якщо не відкрився — залишаємося на карті (нічого не робимо)
+    })();
+  </script>
   <!-- #endregion -->
 
   <script>
