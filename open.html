@@ -6,22 +6,31 @@
   <title>Opening app…</title>
 </head>
 <body>
+
 <script>
+(function () {
+
+  // Беремо хеш (#r=...) якщо є
   const hash = window.location.hash || "";
 
-  // Відкриття Android додатку
+  // Deeplink для Android
   const appUrl = "dpdmap://open" + hash;
 
-  // Fallback на веб-карту (важливо: ім'я файлу саме dpd_map.html)
-  const webUrl = "dpd_map.html" + hash;
+  // Абсолютний fallback на веб-карту (ВАЖЛИВО)
+  const webUrl = "https://vladlysac.github.io/dpd-map/dpd_map.html" + hash;
 
-  window.location.href = appUrl;
+  // Пробуємо відкрити додаток
+  window.location.replace(appUrl);
 
-  setTimeout(() => {
-    window.location.href = webUrl;
-  }, 1200);
+  // Якщо не відкрився — перекидаємо на веб через 1 секунду
+  setTimeout(function () {
+    window.location.replace(webUrl);
+  }, 1000);
+
+})();
 </script>
 
 <p>Відкриваю додаток… Якщо не вийшло — відкрию карту.</p>
+
 </body>
 </html>
