@@ -7,7 +7,33 @@
   <meta charset="UTF-8" />
   <title>DPD Route Map</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <script src="telegram-web-app.js"></script>
+
+  <!-- ✅ Telegram WebApp loader:
+       - в Telegram: підтягує офіційний скрипт
+       - в Android/WebView офлайн: fallback на локальний telegram-web-app.js (якщо він у тебе є) -->
+  <script>
+    (function () {
+      function load(src) {
+        var s = document.createElement("script");
+        s.src = src;
+        s.async = false;
+        document.head.appendChild(s);
+      }
+
+      if (window.Telegram && window.Telegram.WebApp) return;
+
+      // офіційний (для Telegram WebApp)
+      load("https://telegram.org/js/telegram-web-app.js");
+
+      // fallback (для Android/WebView, якщо ти тримаєш локальний stub)
+      setTimeout(function () {
+        if (!(window.Telegram && window.Telegram.WebApp)) {
+          load("telegram-web-app.js");
+        }
+      }, 600);
+    })();
+  </script>
+
   <link rel="stylesheet" href="leaflet.css" />
   <script src="leaflet.js"></script>
   <script src="leaflet-rotate-src.js"></script>
@@ -246,8 +272,6 @@
       border-radius: 10px;
     }
 
-
-
     .leaflet-control-attribution,
     .leaflet-control-attribution a {
       pointer-events: none !important;
@@ -396,20 +420,46 @@
       document.documentElement.style.setProperty("--bottombar-h", bottomH + "px");
       try { if (window.__leafletMap) window.__leafletMap.invalidateSize(); } catch (e) { }
     }
-    let tg = null;
-    if (window.Telegram && window.Telegram.WebApp) {
-      tg = window.Telegram.WebApp;
-      tg.ready();
-      tg.expand();
-      tg.enableClosingConfirmation();
 
-      // ===== OFFLINE SERVICE WORKER (LuxRoute) =====
-      if ("serviceWorker" in navigator) {
-        navigator.serviceWorker.register("./sw.js")
-          .then(() => console.log("SW registered ✅"))
-          .catch(err => console.log("SW error:", err));
+    // ✅ Telegram init з коротким очікуванням (бо офіційний скрипт може підвантажитись трохи пізніше)
+    let tg = null;
+
+    function initTelegramIfReady() {
+      if (window.Telegram && window.Telegram.WebApp) {
+        tg = window.Telegram.WebApp;
+        try {
+          tg.ready();
+          tg.expand();
+          tg.enableClosingConfirmation();
+        } catch (e) { }
+
+        // ===== OFFLINE SERVICE WORKER (LuxRoute) =====
+        if ("serviceWorker" in navigator) {
+          navigator.serviceWorker.register("./sw.js")
+            .then(() => console.log("SW registered ✅"))
+            .catch(err => console.log("SW error:", err));
+        }
+        return true;
       }
+      return false;
     }
+
+    (function waitTelegram() {
+      // пробуємо одразу
+      if (initTelegramIfReady()) return;
+
+      // якщо не готово — пробуємо ще трошки
+      const start = Date.now();
+      const timer = setInterval(() => {
+        if (initTelegramIfReady()) {
+          clearInterval(timer);
+          return;
+        }
+        if (Date.now() - start > 2500) {
+          clearInterval(timer); // Telegram не доступний (звичайний браузер/Android) — це ок
+        }
+      }, 80);
+    })();
 
     // #endregion
 
@@ -428,6 +478,7 @@
         document.addEventListener("gestureend", function (e) { e.preventDefault(); }, { passive: false });
       } catch (e) { }
     })();
+
     if (!window.L) {
       showError("Помилка: Leaflet не завантажився (об'єкт L відсутній).");
     } else {
@@ -503,7 +554,6 @@
         } catch (e) { }
       }
 
-
       function buildShareUrls() {
         // 1) будуємо payload як у тебе
         const addrPool = [];
@@ -531,20 +581,17 @@
         const json = JSON.stringify(payload);
         const packed = LZString.compressToEncodedURIComponent(json);
 
-        // 2) ріжемо packed на шматки (тут головний трюк)
-        // 1200–1600 символів зазвичай безпечніше для WhatsApp/браузерів.
+        // 2) ріжемо packed на шматки
         const PART_LEN = 1400;
         const parts = splitString(packed, PART_LEN);
 
-        // 3) генеруємо ключ маршруту (щоб localStorage збирав правильний комплект)
+        // 3) ключ маршруту
         const routeKey = (Date.now().toString(36) + Math.random().toString(36).slice(2, 8)).toLowerCase();
 
-        // 4) робимо список URL: ?rk=...&pi=1&pt=3&r=...&r2=...
-        // УВАГА: кожен лінк містить ТІЛЬКИ ОДНУ частину packed (так надійніше).
+        // 4) лінки
         const urls = parts.map((part, idx) => {
           const u = new URL(window.location.origin + window.location.pathname);
 
-          // чистимо старе
           u.hash = "";
           u.searchParams.delete("current");
           u.searchParams.delete("stops");
@@ -554,17 +601,13 @@
           u.searchParams.delete("pi");
           u.searchParams.delete("pt");
 
-
-          // чистимо r-частини якщо були
           u.searchParams.delete("r");
           for (let i = 2; i <= 99; i++) u.searchParams.delete("r" + i);
 
-          // додаємо службове
           u.searchParams.set("rk", routeKey);
           u.searchParams.set("pi", String(idx + 1));
           u.searchParams.set("pt", String(parts.length));
 
-          // головне: r=part в QUERY
           u.hash = "r=" + part;
 
           return u.toString();
@@ -572,7 +615,6 @@
 
         return urls;
       }
-
 
       const stopsParam = collectStopsParam(params);
       function getRouteFromHash() {
@@ -597,13 +639,10 @@
         const pt = parseInt(params.get("pt") || "0", 10);
         const part = (new URLSearchParams((window.location.hash || "").replace(/^#/, ""))).get("r");
 
-        // якщо це НЕ part-лінк — пробуємо просто r/r2/r3... як один шматок
         if (!routeKey || !pi || !pt || !part) return null;
 
-        // це part-лінк: зберігаємо шматок у localStorage
         const res = saveRoutePartToLocalStorage(routeKey, pi, pt, part);
 
-        // якщо ще не всі частини — показуємо повідомлення і НЕ ламаємо карту
         if (!res.ready) {
           showToast(
             `✅ Частина ${pi}/${pt} збережена\nВідкрий наступні лінки по черзі.\nЗібрано: ${res.have}/${pt}`,
@@ -613,18 +652,13 @@
           return null;
         }
 
-
-        // коли всі частини зібрані — декомпрес і парс
         try {
           const json = LZString.decompressFromEncodedURIComponent(res.combined);
           if (!json) return null;
           const obj = JSON.parse(json);
 
-          // (опціонально) чистимо збереження, щоб не засмічувати localStorage
           clearRouteParts(routeKey);
 
-          // (дуже корисно) переводимо в hash-формат і перезавантажуємо сторінку
-          // так маршрут відкриється “нормально” одним URL без query
           const clean = new URL(window.location.href);
           clean.search = "";
           clean.hash = "r=" + res.combined;
@@ -635,28 +669,25 @@
         }
       }
 
-
       let routeFromHash = null;
       if (!stopsParam) {
-        // 1) спочатку пробуємо з query (твій новий share-формат)
         routeFromHash = getRouteFromQueryParts(params);
-
-        // 2) якщо не вийшло — пробуємо старий формат з hash
         if (!routeFromHash) {
           routeFromHash = getRouteFromHash();
         }
       }
-
 
       const currentIdFromUrl = parseInt(params.get("current") || "0", 10);
       let currentIdFromHash = 0;
       if (routeFromHash && routeFromHash.current) {
         currentIdFromHash = parseInt(String(routeFromHash.current || "0"), 10) || 0;
       }
+
       let stops = [];
       function safeDecode(s) {
         try { return decodeURIComponent(s); } catch (e) { return s; }
       }
+
       if (stopsParam) {
         stops = stopsParam
           .split("|")
@@ -682,6 +713,7 @@
           })
           .filter(Boolean);
       }
+
       if (!stopsParam && routeFromHash && Array.isArray(routeFromHash.stops)) {
         stops = routeFromHash.stops.map((s, index) => ({
           id: Number(s.id),
@@ -710,12 +742,14 @@
         "#22c55e", "#f97316", "#14b8a6", "#ec4899",
         "#84cc16", "#06b6d4", "#f43f5e", "#8b5cf6",
       ];
+
       let regionGroup = 1;
       stops.forEach((s, i) => {
         if (i > 0 && s.label === 1) regionGroup++;
         s.regionGroup = regionGroup;
         s.regionColor = REGION_COLORS[(regionGroup - 1) % REGION_COLORS.length];
       });
+
       const PIN_STORE_KEY = "dpd_pinned_stops_v1";
       function loadPinnedStops() {
         try {
@@ -747,10 +781,6 @@
         }
       }
 
-      // #endregion
-
-      // #region Map Initialization & State Setup
-
       function savePinnedStops() {
         try {
           const pins = stops.filter(s => s.isPinned).map(s => ({
@@ -762,15 +792,19 @@
           localStorage.setItem(PIN_STORE_KEY, JSON.stringify(pins));
         } catch (e) { }
       }
+
       const pinnedLoaded = loadPinnedStops();
       if (pinnedLoaded.length) stops = stops.concat(pinnedLoaded);
+
       let selectedStopId =
         ((currentIdFromHash || currentIdFromUrl) && stops.find((s) => s.id === (currentIdFromHash || currentIdFromUrl))?.id) ||
         (stops[0] && stops[0].id) ||
         null;
+
       const markers = new Map();
       const map = L.map("map", { rotate: true, bearing: 0 });
       window.__leafletMap = map;
+
       if (stops.length > 0) {
         const avgLat = stops.reduce((sum, s) => sum + s.lat, 0) / stops.length;
         const avgLng = stops.reduce((sum, s) => sum + s.lng, 0) / stops.length;
@@ -778,15 +812,18 @@
       } else {
         map.setView([51.7191, 8.7544], 12);
       }
+
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
         attribution: "&copy; OpenStreetMap contributors",
       }).addTo(map);
+
       try {
         if (map.attributionControl && map.attributionControl.setPrefix) {
           map.attributionControl.setPrefix("");
         }
       } catch (e) { }
+
       (function enableMobileTwistRotate() {
         try {
           const container = map.getContainer();
@@ -799,6 +836,7 @@
           function angleBetween(p1, p2) { return Math.atan2(p2.y - p1.y, p2.x - p1.x); }
           function radToDeg(r) { return r * 180 / Math.PI; }
           function normalizeDeg(d) { d = d % 360; if (d < 0) d += 360; return d; }
+
           container.addEventListener("pointerdown", (e) => {
             pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
             if (pointers.size === 2) {
@@ -808,6 +846,7 @@
               rotating = false;
             }
           }, { passive: true });
+
           container.addEventListener("pointermove", (e) => {
             if (!pointers.has(e.pointerId)) return;
             pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -824,10 +863,6 @@
             map.setBearing(newBearing);
           }, { passive: false });
 
-          // #endregion
-
-          // #region Map Gesture Controls
-
           function endPointer(e) {
             if (pointers.has(e.pointerId)) pointers.delete(e.pointerId);
             if (pointers.size < 2) rotating = false;
@@ -841,13 +876,10 @@
         }
       })();
 
-      // #endregion
-
-      // #region Marker Styling & UI References
-
       function getStopById(id) {
         return stops.find((s) => s.id === id);
       }
+
       function updateMarkerStyle(id) {
         const marker = markers.get(id);
         if (!marker) return;
@@ -886,6 +918,7 @@
         });
         marker.setIcon(icon);
       }
+
       const infoEl = document.getElementById("info");
       const btnComplete = document.getElementById("btn-complete");
       const btnGmaps = document.getElementById("btn-gmaps");
@@ -896,10 +929,6 @@
       const btnSearch = document.getElementById("btn-search");
       const searchResults = document.getElementById("search-results");
       let currentGmapsUrl = null;
-
-      // #endregion
-
-      // #region Stop Interaction & Controls
 
       function setPinnedDeleteUI(stop) {
         if (stop && stop.isPinned) btnDelPin.style.display = "inline-block";
@@ -938,7 +967,6 @@
         syncBarsHeight();
       }
 
-
       function updateGmapsButton(stop) {
         if (!stop) {
           currentGmapsUrl = null;
@@ -954,7 +982,6 @@
         btnGmaps.disabled = false;
       }
 
-
       function selectStop(id, doPan = true) {
         selectedStopId = id;
         markers.forEach((_m, key) => updateMarkerStyle(key));
@@ -963,7 +990,6 @@
         renderInfo();
         updateGmapsButton(stop);
       }
-
 
       function addStopMarker(stop) {
         const marker = L.marker([stop.lat, stop.lng]).addTo(map);
@@ -983,7 +1009,9 @@
         });
         updateMarkerStyle(stop.id);
       }
+
       stops.forEach(addStopMarker);
+
       if (selectedStopId !== null) {
         selectStop(selectedStopId, false);
       } else {
@@ -992,7 +1020,6 @@
         btnDelPin.style.display = "none";
         syncBarsHeight();
       }
-
 
       (function enableLongPressPin() {
         const container = map.getContainer();
@@ -1003,15 +1030,11 @@
         const HOLD_MS = 550;
         const MOVE_PX = 12;
 
-
         function clearPress() {
           if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
           activePointerId = null;
           moved = false;
         }
-        // #endregion
-
-        // #region Pinned Stop Creation & Long Press
 
         function createPinnedStop(lat, lng, addressText) {
           const id = "pinned_" + Date.now();
@@ -1034,10 +1057,10 @@
           syncBarsHeight();
         }
 
-
         function createPinnedAt(latlng) {
           createPinnedStop(latlng.lat, latlng.lng, "Точка на карті");
         }
+
         map.on("movestart zoomstart rotatestart dragstart", clearPress);
         container.addEventListener("pointerdown", (e) => {
           if (activePointerId !== null) return;
@@ -1057,6 +1080,7 @@
             createPinnedAt(latlng);
           }, HOLD_MS);
         }, { passive: true });
+
         container.addEventListener("pointermove", (e) => {
           if (activePointerId !== e.pointerId) return;
           const dx = Math.abs(e.clientX - startX);
@@ -1066,18 +1090,16 @@
             clearPress();
           }
         }, { passive: true });
+
         container.addEventListener("pointerup", (e) => {
           if (activePointerId !== e.pointerId) return;
           clearPress();
         }, { passive: true });
+
         container.addEventListener("pointercancel", clearPress, { passive: true });
         container.addEventListener("pointerleave", clearPress, { passive: true });
         window.__createPinnedStop = createPinnedStop;
       })();
-
-      // #endregion 
-
-      // #region Address Search & Geolocation
 
       const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
       const NOMINATIM_LIMIT = 6;
@@ -1087,10 +1109,10 @@
       let lastRequestAt = 0;
       let inFlight = false;
       let pendingQuery = "";
+
       function normalizeQuery(q) {
         return String(q || "").trim().replace(/\s+/g, " ");
       }
-
 
       function showResults(items) {
         if (!items || !items.length) {
@@ -1126,12 +1148,12 @@
         syncBarsHeight();
       }
 
-
       function hideResults() {
         searchResults.style.display = "none";
         searchResults.innerHTML = "";
         syncBarsHeight();
       }
+
       async function nominatimSearch(query) {
         const q = normalizeQuery(query);
         if (!q) return [];
@@ -1159,7 +1181,6 @@
         searchCache.set(q, arr);
         return arr;
       }
-
 
       async function runSearch(query) {
         const q = normalizeQuery(query);
@@ -1205,6 +1226,7 @@
         if (t.closest("#topbar") || t.closest("#search-results")) return;
         hideResults();
       });
+
       let userMarker = null;
       let lastUserPos = null;
       let watchId = null;
@@ -1223,9 +1245,6 @@
         }
         requestAnimationFrame(step);
       }
-      // #endregion
-
-      // #region Follow Mode (GPS Tracking)
 
       let followEnabled = false;
 
@@ -1249,6 +1268,7 @@
         if (followEnabled) disableFollow();
         else enableFollow();
       });
+
       if (navigator.geolocation) {
         if (watchId !== null) navigator.geolocation.clearWatch(watchId);
         watchId = navigator.geolocation.watchPosition(
@@ -1285,9 +1305,6 @@
         );
       }
 
-      // #endregion
-
-      // #region Action Buttons Handlers
       btnComplete.addEventListener("click", () => {
         if (selectedStopId == null) return;
         const stop = getStopById(selectedStopId);
@@ -1329,7 +1346,6 @@
 
         const msg = `DPD Route — Part ${shareStep + 1}/${urls.length}\nВідкрий цей лінк. Потім натисни Share ще раз для наступного.`;
 
-        // якщо є share — шлемо ОДИН лінк
         if (navigator.share) {
           try {
             await navigator.share({ title: "DPD Route", text: msg, url });
@@ -1342,7 +1358,6 @@
           } catch (e) { }
         }
 
-        // fallback: копіюємо ОДИН лінк
         try {
           await navigator.clipboard.writeText(url);
           alert(`✅ Скопійовано Part ${shareStep + 1}/${urls.length}\nВстав у WhatsApp і відправ.\nПотім натисни Share ще раз.`);
@@ -1356,8 +1371,6 @@
           alert("✅ Усі частини готові. Якщо треба — натисни Share ще раз, щоб згенерувати заново.");
         }
       });
-
-
 
       btnDelPin.addEventListener("click", () => {
         const stop = getStopById(selectedStopId);
@@ -1388,8 +1401,6 @@
       setTimeout(syncBarsHeight, 250);
       window.addEventListener("resize", syncBarsHeight);
     }
-
-    // #endregion
 
   </script>
 
